@@ -1,103 +1,170 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useState } from 'react';
+
+export default function ConfiguratorPage() {
+  const [accentColor, setAccentColor] = useState('#068ce0');
+
+  // For now: example URL (later dynamically generated)
+  const boardUrl = `/board?stations=123:ubahn,bus:5&refresh=60&theme=dark&amount=10&accent=${encodeURIComponent(accentColor)}`;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(boardUrl);
+  };
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div
+      style={{ '--accent': accentColor } as React.CSSProperties}
+      className="min-h-screen flex items-center justify-center bg-gray-100 p-4"
+    >
+      <div className="max-w-3xl w-full bg-white rounded-xl shadow-md p-6 space-y-6">
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+
+        {/* Board Title Input */}
+        <input
+          type="text"
+          placeholder="Board title (optional)"
+          className="w-full border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2"
+          style={{ '--tw-ring-color': 'var(--accent)' } as React.CSSProperties}
+        />
+
+        {/* Station Search */}
+        <div className="flex">
+          <input
+            type="text"
+            placeholder="Search station..."
+            className="flex-grow border border-gray-300 rounded-l-md p-2 focus:outline-none focus:ring-2"
+            style={{ '--tw-ring-color': 'var(--accent)' } as React.CSSProperties}
+          />
+          <button
+            style={{ backgroundColor: 'var(--accent)' }}
+            className="text-white px-4 rounded-r-md hover:opacity-90 transition"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            Add
+          </button>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+
+        {/* Added Stations List (Example) */}
+        <div className="space-y-4">
+          {/* Example Station Card */}
+          <div className="border rounded-lg p-4 space-y-3 bg-gray-50">
+            <div className="flex justify-between items-center">
+              <span className="font-medium">Station Name Example</span>
+              <button
+                className="text-red-500 hover:underline transition"
+              >
+                Remove
+              </button>
+            </div>
+
+            {/* Transport Type Checkboxes */}
+            <div className="space-x-4">
+              {['U-Bahn', 'Bus', 'Tram', 'S-Bahn'].map((label) => (
+                <label key={label} className="inline-flex items-center space-x-1">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 rounded border-gray-300 focus:ring-2"
+                    style={{
+                      accentColor: 'var(--accent)',
+                      '--tw-ring-color': 'var(--accent)',
+                    } as React.CSSProperties}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
+
+            {/* Run Time Input */}
+            <div>
+              <input
+                type="number"
+                placeholder="Time to run (min)"
+                className="w-40 border border-gray-300 rounded-md p-1 focus:outline-none focus:ring-2"
+                style={{ '--tw-ring-color': 'var(--accent)' } as React.CSSProperties}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Global Settings */}
+        <div className="space-y-4">
+          {/* Refresh Rate */}
+          <div>
+            <input
+              type="range"
+              min="10"
+              max="300"
+              className="w-full"
+              style={{ accentColor: 'var(--accent)' }}
+            />
+            <p className="text-sm text-gray-600">Refresh rate (seconds)</p>
+          </div>
+
+          {/* Dark/Light Mode Switch */}
+          <div className="flex items-center space-x-2">
+            <span>Light</span>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" className="sr-only peer" />
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent rounded-full peer dark:bg-gray-700 peer-checked:bg-[var(--accent)] transition"></div>
+            </label>
+            <span>Dark</span>
+          </div>
+
+          {/* Number of Entries */}
+          <div>
+            <input
+              type="number"
+              placeholder="Number of entries to display"
+              className="w-65 border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2"
+              style={{ '--tw-ring-color': 'var(--accent)' } as React.CSSProperties}
+            />
+          </div>
+        </div>
+
+        {/* Accent Color Picker */}
+        <div className="flex items-center space-x-4">
+          <input
+            type="text"
+            value={accentColor}
+            onChange={(e) => setAccentColor(e.target.value)}
+            placeholder="#Accent color"
+            className="border border-gray-300 rounded-md p-2 w-25 focus:outline-none focus:ring-2"
+            style={{ '--tw-ring-color': 'var(--accent)' } as React.CSSProperties}
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
+          <input
+            type="color"
+            value={accentColor}
+            onChange={(e) => setAccentColor(e.target.value)}
+            className="w-10 h-10 border-0 p-0 cursor-pointer"
           />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
+        </div>
+        
+        {/* Generated URL Display with Copy + Launch */}
+        <div className="flex items-center space-x-2">
+          <textarea
+            value={boardUrl}
+            readOnly
+            className="flex-grow border border-gray-300 rounded-md p-2 text-sm h-24 resize-none focus:outline-none focus:ring-2"
+            style={{ '--tw-ring-color': 'var(--accent)' } as React.CSSProperties}
           />
-          Go to nextjs.org →
-        </a>
-      </footer>
+          <button
+            onClick={handleCopy}
+            className="p-2 rounded-md border border-gray-300 hover:bg-gray-100 transition"
+            title="Copy URL"
+          >
+            📋
+          </button>
+        </div>
+
+        {/* Generate Button */}
+        <button
+          style={{ backgroundColor: 'var(--accent)' }}
+          className="w-full text-white py-3 rounded-md hover:opacity-90 transition"
+        >
+          Launch Departure Board
+        </button>
+
+      </div>
     </div>
   );
 }

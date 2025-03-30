@@ -1,8 +1,8 @@
-export type StationConfig = {
+export type Station = {
     id: string;
     displayName?: string;
     place?: string;
-    types: string[]; // available types: ubahn, bus, tram, sbahn
+    types: string[]; // selected types: ubahn, bus, tram, sbahn
     runTime: number; // stored in seconds
 };
 
@@ -13,10 +13,18 @@ export type StationConfig = {
 // refresh: refresh
 // darkMode: theme (dark if true else light)
 export type Config = {
-    stations: StationConfig[];
+    stations: Station[];
     displayName: string;
     amount: number;
     refresh: number;
     darkMode: boolean;
     accent: string;
 };
+
+export type Departure = {
+    departureStation: string;
+    departureTime: Date;
+    transportType: string;
+    transportLabel: string;
+    transportDestination: string;
+}

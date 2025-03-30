@@ -1,6 +1,6 @@
-import { StationConfig } from "@/types/config";
+import { Station } from "@/types/config";
 
-export const fetchStations = async (): Promise<StationConfig[]> => {
+export const fetchStations = async (): Promise<Station[]> => {
     try {
         const response = await fetch("https://www.mvg.de/.rest/zdm/stations");
         const data = await response.json();

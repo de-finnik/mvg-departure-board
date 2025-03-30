@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { StationConfig, Config } from '@/types/config';
+import { Station, Config } from '@/types/config';
 import { stat } from 'fs';
 import { toast } from 'sonner';
 import { fetchStations } from '@/lib/fetchStations';
@@ -21,7 +21,7 @@ export default function ConfiguratorPage() {
 
   const [stationSearch, setStationSearch] = useState('');
 
-  const [allStations, setAllStations] = useState<StationConfig[]>([]);
+  const [allStations, setAllStations] = useState<Station[]>([]);
 
   const stationSearchInputRef = useRef<HTMLInputElement>(null);
 
@@ -38,7 +38,7 @@ export default function ConfiguratorPage() {
     stationSearchInputRef.current?.focus();
   }, []);
 
-  const handleAddStation = (addStation: StationConfig) => {
+  const handleAddStation = (addStation: Station) => {
     if(config.stations.some((station) => station.id === addStation.id)) {
       toast.error("This station is already in the list");
       return;

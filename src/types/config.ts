@@ -2,7 +2,7 @@ export type Station = {
     id: string;
     displayName?: string;
     place?: string;
-    types: string[]; // selected types: ubahn, bus, tram, sbahn
+    filter: string;
     runTime: number; // stored in seconds
 };
 

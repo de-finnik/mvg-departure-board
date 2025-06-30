@@ -5,19 +5,12 @@ import { Station, Config } from '@/types/config';
 import { stat } from 'fs';
 import { toast } from 'sonner';
 import { fetchStations } from '@/lib/fetchStations';
+import { configToURL, defaultConfig } from '@/lib/parseConfig';
 
 
 export default function ConfiguratorPage() {
-  const baseUrl = 'http://localhost:3000';
 
-  const [config, setConfig] = useState<Config>({
-    stations: [],
-    displayName: '',
-    amount: 5,
-    refresh: 30,
-    darkMode: false,
-    accent: '#068ce0'
-  });
+  const [config, setConfig] = useState<Config>(defaultConfig);
 
   const [stationSearch, setStationSearch] = useState('');
 
@@ -64,6 +57,16 @@ export default function ConfiguratorPage() {
     }));
   };
 
+  const handleFilterChange = (stationId: string, filter: string) => {
+    setConfig((prev) => ({
+      ...prev,
+      stations: prev.stations.map((s) => s.id !== stationId ? s : {
+        ...s,
+        filter: filter
+      }),
+    }));
+  };
+
   const handleRunTimeChange = (stationId: string, seconds: number) => {
     setConfig((prev) => ({
       ...prev,
@@ -71,20 +74,6 @@ export default function ConfiguratorPage() {
         ...s,
         runTime: seconds
       }),
-    }));
-  };
-
-  const handleTransportTypeChange = (stationId: string, type: string) => {
-    setConfig((prev) => ({
-      ...prev,
-      stations: prev.stations.map((s) =>
-        stationId !== s.id ? s : 
-        {
-          ...s,
-          types: s.types.includes(type) 
-            ? s.types.filter((t) => t !== type)
-            : [...s.types, type]
-        })
     }));
   };
 
@@ -116,14 +105,7 @@ export default function ConfiguratorPage() {
     }));
   };
 
-  const stationsString = config.stations
-    .map(
-      (station) =>
-        `${station.id}:${station.types.join(',')}:${station.runTime}`
-    )
-    .join('|');
-
-  const boardUrl = `${baseUrl}/board?title=${encodeURIComponent(config.displayName)}&stations=${stationsString}&amount=${config.amount}&refresh=${config.refresh}&accent=${encodeURIComponent(config.accent)}&theme=${config.darkMode?'dark':'light'}`;
+  const boardUrl = configToURL(config);
 
   const searchParts = stationSearch.toLowerCase().split(" ");
 
@@ -221,24 +203,34 @@ export default function ConfiguratorPage() {
                 </button>
               </div>
 
-              {/* Transport Type Checkboxes */}
-              <div className="space-x-4">
-                {['U-Bahn', 'Bus', 'Tram', 'S-Bahn'].map((label) => (
-                  <label key={label} className="inline-flex items-center space-x-1">
-                    <input
-                      type="checkbox"
-                      checked={station.types.includes(normTransportType(label))}
-                      onChange={(e) => handleTransportTypeChange(station.id, normTransportType(label))}
-                      className="w-4 h-4 rounded border-gray-300 focus:ring-2"
-                      style={{
-                        accentColor: 'var(--accent)',
-                        '--tw-ring-color': 'var(--accent)',
-                      } as React.CSSProperties}
-                    />
-                    <span>{label}</span>
-                  </label>
-                ))}
+              {/* Label + help button */}
+              <div className="mb-2 flex items-center gap-2">
+                <p className="text-sm text-gray-600">Exclusion Filters</p>
+                {/* Tooltip block */}
+                <div className="relative inline-block group">
+                  <button
+                    type="button"
+                    className="text-xs bg-gray-300 text-gray-800 rounded-full w-5 h-5 flex items-center justify-center font-bold hover:bg-gray-400"
+                  >
+                    ?
+                  </button>
+                  <div className="absolute z-10 hidden group-hover:block left-6 top-1 bg-gray-700 text-white text-xs rounded px-3 py-2 shadow-lg whitespace-nowrap">
+                    Exclude certain departures from the departure board<br />
+                    Format: <code>line:destination</code><br />
+                    Use <code>*</code> as wildcard<br />
+                    Separate filters with <code>;</code>
+                  </div>
+                </div>
               </div>
+
+              {/* Input itself */}
+              <input
+                type="text"
+                value={station.filter}
+                onChange={(e) => handleFilterChange(station.id, e.target.value)}
+                placeholder="e.g. U2:Feldmoching;170:Kieferngarten"
+                className="w-full border rounded-md p-2 text-sm font-mono"
+              />
 
               {/* Run Time Input */}
               <div className="flex items-center space-x-4">

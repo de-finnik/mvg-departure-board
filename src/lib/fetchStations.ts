@@ -10,8 +10,7 @@ export const fetchStations = async (): Promise<Station[]> => {
                 id: entry.id, 
                 place: entry.place,
                 runTime: 300,
-                types: entry.products.map((transport: string) => 
-                    transport.toLowerCase())
+                filter: "",
             }));
         return stations;
     } catch (error) {

@@ -1,3 +1,5 @@
+import { platform } from "os";
+
 export type Station = {
     name: string;
     id: string;
@@ -9,7 +11,8 @@ export async function fetchStations(searchString: string): Promise<Station[]> {
     return data.map((entry: any) => 
         ({
             name: entry.name,
-            id: entry.globalId
+            id: entry.globalId, 
+            place: entry.place  
         })
     );
 }

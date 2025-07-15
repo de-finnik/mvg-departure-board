@@ -1,9 +1,7 @@
 export type Station = {
     id: string;
-    displayName?: string;
+    name?: string;
     place?: string;
-    filter: string;
-    runTime: number; // stored in seconds
 };
 
 // Get parameters:
@@ -13,18 +11,20 @@ export type Station = {
 // refresh: refresh
 // darkMode: theme (dark if true else light)
 export type Config = {
-    stations: Station[];
-    displayName: string;
+    station: Station;
     amount: number;
-    refresh: number;
     darkMode: boolean;
-    accent: string;
+    titleBar: string;
+    includeFilters: LineDest[];
+    excludeFilters: LineDest[];
 };
 
+export type LineDest = {
+    line: string;
+    destination: string;
+}
+
 export type Departure = {
-    departureStation: string;
-    departureTime: Date;
-    transportType: string;
-    transportLabel: string;
-    transportDestination: string;
+    linedest: LineDest;
+    time: Date;
 }

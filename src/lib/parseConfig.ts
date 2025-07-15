@@ -1,52 +1,55 @@
-import { Config, Station } from "@/types/config";
+import { Config, LineDest, Station } from "@/types/types";
 import { ReadonlyURLSearchParams } from "next/navigation";
 
 
-const baseUrl = 'http://localhost:3000';
-
 export const defaultConfig = {
-    stations: [],
-    displayName: '',
+    station: {id: ''},
     amount: 5,
-    refresh: 30,
     darkMode: false,
-    accent: '#068ce0'
+    titleBar: "no",
+    includeFilters: [],
+    excludeFilters: []
 };
-
-export function parseStations(input: string): Station[] {
-    if (!input) return [];
-    return input.split('|').map(part => {
-      const [id, filterRaw, runTimeRaw] = part.split('~');
-      return {
-        id,
-        runTime: parseInt(runTimeRaw ?? '0'),
-        filter: filterRaw ? decodeURIComponent(filterRaw) : ""
-      };
-    });
-}
 
 function parseIntOrDefault(input: string | null | undefined, defaultValue: number) {
     return input ? parseInt(input): defaultValue;
 }
 
+function encodeFilters(filters: LineDest[]): string {
+  return filters
+    .map(f => `${f.line}:${f.destination}`)
+    .join(";");
+}
+
+function decodeFilters(str: string | null): LineDest[] {
+  if(!str) return [];
+  return str
+    .split(";")
+    .filter(s=>s.length>0)
+    .map(p => {
+      const [line, destination] = p.split(':');
+      return { line, destination };
+    });
+}
+
 export function searchParamToConfig(searchParams: ReadonlyURLSearchParams): Config {
     return {
-      displayName: searchParams.get('title') || defaultConfig['displayName'],
-      refresh: parseIntOrDefault(searchParams.get('refresh'), defaultConfig['refresh']),
-      darkMode: searchParams.get('theme') === 'dark',
+      station: {id: searchParams.get('station') || ''},
       amount: parseIntOrDefault(searchParams.get('amount'), defaultConfig['amount']),
-      accent: searchParams.get('accent') || defaultConfig['accent'],
-      stations: parseStations(searchParams.get('stations') || ''),
+      darkMode: searchParams.get('theme') === 'dark',
+      titleBar: searchParams.get('titlebar') || defaultConfig['titleBar'],
+      includeFilters: decodeFilters(searchParams.get('include')),
+      excludeFilters: decodeFilters(searchParams.get('exclude'))
     };
 }
 
 export function configToURL(config: Config): string {
-  const stationsString = encodeURIComponent(config.stations
-    .map(
-      (station) =>
-        `${station.id}~${station.filter}~${station.runTime}`
-    )
-    .join('|'));
-
-  return `${baseUrl}/board?title=${encodeURIComponent(config.displayName)}&stations=${stationsString}&amount=${config.amount}&refresh=${config.refresh}&accent=${encodeURIComponent(config.accent)}&theme=${config.darkMode?'dark':'light'}`;
+  const q = new URLSearchParams(window.location.search);
+  q.set('station', config.station.id);
+  q.set('amount', String(config.amount));
+  q.set('theme', config.darkMode?"dark":"light");
+  q.set('titlebar', config.titleBar);
+  q.set('include', encodeFilters(config.includeFilters));
+  q.set('exclude', encodeFilters(config.excludeFilters));
+  return `${window.location.origin}/board?${q.toString()}`;
 }

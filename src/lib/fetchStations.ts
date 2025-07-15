@@ -1,4 +1,4 @@
-import { Station } from "@/types/config";
+import { Station } from "@/types/types";
 
 export const fetchStations = async (): Promise<Station[]> => {
     try {

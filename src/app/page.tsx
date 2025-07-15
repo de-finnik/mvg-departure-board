@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Station, Config } from '@/types/config';
+import { Station, Config } from '@/types/types';
 import { stat } from 'fs';
 import { toast } from 'sonner';
-import { fetchStations } from '@/lib/fetchStations';
+import { fetchStations } from '@/lib/mvg';
 import { configToURL, defaultConfig } from '@/lib/parseConfig';
+import { useDebounce } from 'use-debounce';
 
 
 export default function ConfiguratorPage() {
@@ -14,66 +15,54 @@ export default function ConfiguratorPage() {
 
   const [stationSearch, setStationSearch] = useState('');
 
-  const [allStations, setAllStations] = useState<Station[]>([]);
+  const [searchResults, setSearchResults] = useState<Station[]>([]);
+
+  const [debouncedSearch] = useDebounce(stationSearch, 300);
 
   const stationSearchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const loadStations = async () => {
-      try {
-        const stations = await fetchStations();
-        setAllStations(stations);
-      } catch (error) {
-        toast.error('Failed to load stations');
-      }
-    };
-    loadStations();
     stationSearchInputRef.current?.focus();
   }, []);
 
-  const handleAddStation = (addStation: Station) => {
-    if(config.stations.some((station) => station.id === addStation.id)) {
-      toast.error("This station is already in the list");
-      return;
-    }
-    if(config.displayName.length === 0) {
-      config.displayName = addStation.displayName ?? "";
-    }
+  useEffect(() => {
+    const search = async () => {
+      if(debouncedSearch.length < 3) {
+        setSearchResults([]);
+        return;
+      }
+      console.log("now");
+      try {
+        const results = await fetchStations(debouncedSearch);
+        setSearchResults(results);
+      } catch (err) {
+        console.log(err);
+        toast.error("Failed to search stations");
+      }
+    };
+    search();
+  }, [debouncedSearch]);
+
+  const handleSetStation = (station: Station) => {
     setConfig((prev) => ({
       ...prev,
-      stations: [
-        ...prev.stations,
-        addStation
-      ],
+      station: station
     }));
     setStationSearch('');
     stationSearchInputRef.current?.focus();
   }
 
-  const handleRemoveStation = (stationId: string) => {
+  const handleRemoveStation = () => {
     setConfig((prev) => ({
       ...prev,
-      stations: prev.stations.filter((s) => s.id !== stationId),
+      station: {id: ''}
     }));
   };
 
   const handleFilterChange = (stationId: string, filter: string) => {
     setConfig((prev) => ({
       ...prev,
-      stations: prev.stations.map((s) => s.id !== stationId ? s : {
-        ...s,
-        filter: filter
-      }),
-    }));
-  };
-
-  const handleRunTimeChange = (stationId: string, seconds: number) => {
-    setConfig((prev) => ({
-      ...prev,
-      stations: prev.stations.map((s) => s.id !== stationId ? s : {
-        ...s,
-        runTime: seconds
-      }),
+      filter: filter
     }));
   };
 
@@ -81,13 +70,6 @@ export default function ConfiguratorPage() {
     setConfig((prev) => ({
       ...prev,
       amount: amount
-    }));
-  };
-
-  const handleRefreshChange = (refresh: number) => {
-    setConfig((prev) => ({
-      ...prev,
-      refresh: refresh
     }));
   };
 
@@ -107,32 +89,9 @@ export default function ConfiguratorPage() {
 
   const boardUrl = configToURL(config);
 
-  const searchParts = stationSearch.toLowerCase().split(" ");
-
-  const filteredStations = allStations
-    .filter((station) => 
-      (station.displayName ?? "").toLowerCase().includes(searchParts[0])
-    )
-    .sort((a, b) => {
-      if(searchParts.length > 1 && searchParts[1].length > 0 && (b.place ?? "").toLowerCase().includes(searchParts[1])) {
-        return 1;
-      }
-      if(searchParts.length > 1 && searchParts[1].length > 0 && (a.place ?? "").toLowerCase().includes(searchParts[1])) {
-        return -1;
-      }
-      if(a.place === "München" && b.place !== "München") {
-        return -1;
-      }
-      if(a.place !== "München" && b.place === "München") {
-        return 1;
-      }
-      return 0;
-    })
-    .slice(0, 8)
-
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if(e.key === 'Enter' && filteredStations.length > 0) {
-      handleAddStation(filteredStations[0]);
+    if(e.key === 'Enter' && searchResults.length > 0) {
+      handleSetStation(searchResults[0]);
     }
   };
 
@@ -144,23 +103,12 @@ export default function ConfiguratorPage() {
 
   return (
     <div
-      style={{ '--accent': config.accent } as React.CSSProperties}
       className="min-h-screen flex items-center justify-center bg-gray-100 p-4"
     >
       <div className="max-w-3xl w-full bg-white rounded-xl shadow-md p-6 space-y-6">
-        {/* Board Title Input */}
-        <p className="text-sm mb-1 text-gray-600">Name of departure board</p>
-        <input
-          type="text"
-          placeholder="Board title (optional)"
-          value={config.displayName}
-          onChange={(e) => setConfig((prev) => ({...prev, displayName: e.target.value}))}
-          className="w-full border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2"
-          style={{ '--tw-ring-color': 'var(--accent)' } as React.CSSProperties}
-        />
-
         {/* Station Search */}
-        <div className="relative">
+        
+        {config.station.id.length == 0 && (<div className="relative">
           <input
             ref={stationSearchInputRef}
             type="text"
@@ -171,33 +119,33 @@ export default function ConfiguratorPage() {
             className="flex-grow border border-gray-300 rounded-l-md p-2 focus:outline-none focus:ring-2 w-full"
             style={{ '--tw-ring-color': 'var(--accent)' } as React.CSSProperties}
           />
-          {stationSearch && filteredStations.length > 0 && (
+          {stationSearch && searchResults.length > 0 && (
             <div className='absolute bg-white border border-gray-300 rounded-md mt-1 w-full z-10 max-h-40 overflow-y-auto'>
-              {filteredStations.map((station) => (
+              {searchResults.map((station) => (
                 <div
                   key={station.id}
                   className='p-2 hover:bg-gray-100 cursor-pointer'
-                  onClick={() => handleAddStation(station)}
+                  onClick={() => handleSetStation(station)}
                   >
-                    {station.displayName}<p className='text-sm text-gray-600'> {station.place}</p>
+                    {station.name}
+                    <p className='text-sm text-gray-600'> {station.place}</p>
                 </div>
               ))}
             </div>
           )}
-        </div>
+        </div>)}
 
         {/* Added Stations List (Example) */}
-        <div className="space-y-4">
-          {config.stations.map((station) => (
+        {config.station.id.length != 0 && (<div className="space-y-4">
             <div
-              key={station.id}
+              key={config.station.id}
               className='border rounded-lg p-4 space-y-3 bg-gray-50'
             >
               <div className="flex justify-between items-center">
-                <span className="font-medium">{station.displayName ?? station.id}</span>
+                <span className="font-medium">{config.station.name ?? config.station.id}</span>
                 <button
                   className="text-red-500 hover:underline transition"
-                  onClick={() => handleRemoveStation(station.id)}
+                  onClick={() => handleRemoveStation()}
                 >
                   Remove
                 </button>
@@ -226,45 +174,28 @@ export default function ConfiguratorPage() {
               {/* Input itself */}
               <input
                 type="text"
-                value={station.filter}
-                onChange={(e) => handleFilterChange(station.id, e.target.value)}
+                value={config.filter}
+                onChange={(e) => handleFilterChange(config.station.id, e.target.value)}
                 placeholder="e.g. U2:Feldmoching;170:Kieferngarten"
                 className="w-full border rounded-md p-2 text-sm font-mono"
               />
 
-              {/* Run Time Input */}
-              <div className="flex items-center space-x-4">
-                <p className="text-sm mb-1 text-gray-600">Time to get to station (seconds)</p>
-                <input
-                  type="number"
-                  value={station.runTime}
-                  onChange={(e) => handleRunTimeChange(station.id, Number(e.target.value))}
-                  placeholder="Time to run (min)"
-                  className="w-40 border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2"
-                  style={{ '--tw-ring-color': 'var(--accent)' } as React.CSSProperties}
-                />
-              </div>
             </div>
-          ))}
-        </div>
+        </div>)}
 
         {/* Global Settings */}
         <div className="space-y-4">
-          {/* Refresh Rate */}
-          <div>
-            <input
-              value={config.refresh}
-              onChange={(e) => handleRefreshChange(Number(e.target.value))}
-              type="range"
-              min="5"
-              max="300"
-              className="w-full"
-              style={{ accentColor: 'var(--accent)' }}
-            />
-            <p className="text-sm text-gray-600">Refresh rate: {config.refresh}s</p>
+          {/* Dark/Light Mode Switch */}
+          <div className="flex items-center space-x-2">
+            <span>Light</span>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" checked={!config.darkMode} className="sr-only peer" onChange={(e)=>handleDarkMode(!e.target.checked)}/>
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent rounded-full peer dark:bg-gray-700 peer-checked:bg-gray-300 transition"></div>
+            </label>
+            <span>Dark</span>
           </div>
 
-          {/* Dark/Light Mode Switch */}
+          {/* Titlebar */}
           <div className="flex items-center space-x-2">
             <span>Light</span>
             <label className="relative inline-flex items-center cursor-pointer">

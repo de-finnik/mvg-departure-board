@@ -23,4 +23,3 @@ export async function fetchDepartures(stationId: string) {
     return data;
 }
 
-fetchDepartures("de:09162:430").then(console.log);

@@ -1,270 +1,329 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useRef } from 'react';
-import { Station, Config } from '@/types/types';
-import { stat } from 'fs';
-import { toast } from 'sonner';
-import { fetchStations } from '@/lib/mvg';
-import { configToURL, defaultConfig } from '@/lib/parseConfig';
-import { useDebounce } from 'use-debounce';
+import { useState, useEffect, useMemo } from "react";
+import {
+  DndContext,
+  closestCenter,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  rectSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
+import { Station, LineDest, Config } from "@/types/types";
 
-export default function ConfiguratorPage() {
+import { configToURL } from "@/lib/parseConfig";
+import { fetchStations } from "@/lib/mvg";
+import { fetchDepartingLines, mvvFetchDepartingLines } from "@/lib/mvv";
 
-  const [config, setConfig] = useState<Config>(defaultConfig);
+/**********************************************************************
+ * Small, dependency‑free UI: plain HTML elements styled with Tailwind *
+ **********************************************************************/
 
-  const [stationSearch, setStationSearch] = useState('');
-
-  const [searchResults, setSearchResults] = useState<Station[]>([]);
-
-  const [debouncedSearch] = useDebounce(stationSearch, 300);
-
-  const stationSearchInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    stationSearchInputRef.current?.focus();
-  }, []);
-
-  useEffect(() => {
-    const search = async () => {
-      if(debouncedSearch.length < 3) {
-        setSearchResults([]);
-        return;
-      }
-      console.log("now");
-      try {
-        const results = await fetchStations(debouncedSearch);
-        setSearchResults(results);
-      } catch (err) {
-        console.log(err);
-        toast.error("Failed to search stations");
-      }
-    };
-    search();
-  }, [debouncedSearch]);
-
-  const handleSetStation = (station: Station) => {
-    setConfig((prev) => ({
-      ...prev,
-      station: station
-    }));
-    setStationSearch('');
-    stationSearchInputRef.current?.focus();
-  }
-
-  const handleRemoveStation = () => {
-    setConfig((prev) => ({
-      ...prev,
-      station: {id: ''}
-    }));
+/** Draggable pill -------------------------------------------------- */
+function LineDestPill({ id, ld }: { id: string; ld: LineDest }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+  const style: React.CSSProperties = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
   };
-
-  const handleFilterChange = (stationId: string, filter: string) => {
-    setConfig((prev) => ({
-      ...prev,
-      filter: filter
-    }));
-  };
-
-  const handleAmountChange = (amount: number) => {
-    setConfig((prev) => ({
-      ...prev,
-      amount: amount
-    }));
-  };
-
-  const handleDarkMode = (darkMode: boolean) => {
-    setConfig((prev) => ({
-      ...prev,
-      darkMode: darkMode
-    }));
-  };
-
-  const handleAccentChange = (accent: string) => {
-    setConfig((prev) => ({
-      ...prev,
-      accent: accent
-    }));
-  };
-
-  const boardUrl = configToURL(config);
-
-  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if(e.key === 'Enter' && searchResults.length > 0) {
-      handleSetStation(searchResults[0]);
-    }
-  };
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(boardUrl);
-  };
-
-  const normTransportType = (label: string) => label.toLowerCase().replace(/[^a-z]/g, '');
-
   return (
     <div
-      className="min-h-screen flex items-center justify-center bg-gray-100 p-4"
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="cursor-grab select-none rounded-full px-3 py-1 text-xs font-mono mr-2 mb-2 border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700"
     >
-      <div className="max-w-3xl w-full bg-white rounded-xl shadow-md p-6 space-y-6">
-        {/* Station Search */}
-        
-        {config.station.id.length == 0 && (<div className="relative">
-          <input
-            ref={stationSearchInputRef}
-            type="text"
-            placeholder="Search station..."
-            value={stationSearch}
-            onKeyDown={handleSearchKeyDown}
-            onChange={(e) => setStationSearch(e.target.value)}
-            className="flex-grow border border-gray-300 rounded-l-md p-2 focus:outline-none focus:ring-2 w-full"
-            style={{ '--tw-ring-color': 'var(--accent)' } as React.CSSProperties}
-          />
-          {stationSearch && searchResults.length > 0 && (
-            <div className='absolute bg-white border border-gray-300 rounded-md mt-1 w-full z-10 max-h-40 overflow-y-auto'>
-              {searchResults.map((station) => (
-                <div
-                  key={station.id}
-                  className='p-2 hover:bg-gray-100 cursor-pointer'
-                  onClick={() => handleSetStation(station)}
-                  >
-                    {station.name}
-                    <p className='text-sm text-gray-600'> {station.place}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>)}
+      {ld.line}:{ld.destination}
+    </div>
+  );
+}
 
-        {/* Added Stations List (Example) */}
-        {config.station.id.length != 0 && (<div className="space-y-4">
-            <div
-              key={config.station.id}
-              className='border rounded-lg p-4 space-y-3 bg-gray-50'
-            >
-              <div className="flex justify-between items-center">
-                <span className="font-medium">{config.station.name ?? config.station.id}</span>
+/* ------------------------------------------------------------------ */
+export default function DepartureConfigurator() {
+  /* ------------ wizard step ------------- */
+  const [step, setStep] = useState<1 | 2>(1);
+
+  /* ------------ station search ---------- */
+  const [stationQuery, setStationQuery] = useState("");
+  const [stationSuggestions, setStationSuggestions] = useState<Station[]>([]);
+  const [selectedStation, setSelectedStation] = useState<Station | null>(null);
+
+  /* ------------ config ------------------ */
+  const [config, setConfig] = useState<Config>(() => ({
+    station: { id: "" },
+    amount: 8,
+    darkMode: false,
+    titleBar: "",
+    includeFilters: [],
+    excludeFilters: [],
+  }));
+
+  /* ------------ station suggestions fetch */
+  useEffect(() => {
+    if (!stationQuery.trim()) {
+      setStationSuggestions([]);
+      return;
+    }
+    const t = setTimeout(async () => {
+      const res = await fetchStations(stationQuery.trim());
+      setStationSuggestions(res);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [stationQuery]);
+
+  /* ------------ line‑dest pills ------------ */
+  const [lineDestSuggestions, setLineDestSuggestions] = useState<LineDest[]>([]);
+  const [availableIds, setAvailableIds] = useState<string[]>([]);
+  const [includeIds, setIncludeIds] = useState<string[]>([]);
+  const [excludeIds, setExcludeIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!selectedStation) return;
+    (async () => {
+      const lds = await fetchDepartingLines(selectedStation);
+      setLineDestSuggestions(lds);
+      const ids = lds.map((_, i) => `${i}`);
+      setAvailableIds(ids);
+      setIncludeIds([]);
+      setExcludeIds([]);
+      setConfig((c) => ({
+        ...c,
+        station: selectedStation,
+        titleBar: selectedStation.name ?? "",
+        includeFilters: [],
+        excludeFilters: [],
+      }));
+    })();
+  }, [selectedStation]);
+
+  /* ------------ drag end ----------------- */
+  function handleDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over) return;
+
+    if (over.id === "include-drop") {
+      if (!includeIds.includes(active.id as string)) {
+        setIncludeIds((prev) => [...prev, active.id as string]);
+        setConfig((c) => ({
+          ...c,
+          includeFilters: [
+            ...c.includeFilters,
+            lineDestSuggestions[parseInt(active.id as string)],
+          ],
+        }));
+      }
+    } else if (over.id === "exclude-drop") {
+      if (!excludeIds.includes(active.id as string)) {
+        setExcludeIds((prev) => [...prev, active.id as string]);
+        setConfig((c) => ({
+          ...c,
+          excludeFilters: [
+            ...c.excludeFilters,
+            lineDestSuggestions[parseInt(active.id as string)],
+          ],
+        }));
+      }
+    }
+  }
+
+  /* ------------ url preview -------------- */
+  const url = useMemo(() => (config.station.id ? `${configToURL(config)}` : ""), [config]);
+
+  /* ------------------------------------------------------------------ */
+  /*                         RENDER                                     */
+  /* ------------------------------------------------------------------ */
+  if (step === 1) {
+    return (
+      <main className="max-w-md mx-auto mt-10 p-6 border rounded-lg bg-white dark:bg-gray-900 dark:text-white shadow">
+        <h1 className="text-xl font-semibold mb-4">Choose station</h1>
+        <input
+          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring"
+          placeholder="Start typing station name…"
+          value={stationQuery}
+          onChange={(e) => setStationQuery(e.target.value)}
+        />
+        {stationSuggestions.length > 0 && (
+          <ul className="mt-2 border rounded max-h-56 overflow-y-auto divide-y">
+            {stationSuggestions.map((s) => (
+              <li key={s.id}>
                 <button
-                  className="text-red-500 hover:underline transition"
-                  onClick={() => handleRemoveStation()}
+                  className="w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  onClick={() => {
+                    setSelectedStation(s);
+                    setStep(2);
+                  }}
                 >
-                  Remove
+                  {s.name} {s.place && <span className="text-xs text-gray-500">({s.place})</span>}
                 </button>
-              </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </main>
+    );
+  }
 
-              {/* Label + help button */}
-              <div className="mb-2 flex items-center gap-2">
-                <p className="text-sm text-gray-600">Exclusion Filters</p>
-                {/* Tooltip block */}
-                <div className="relative inline-block group">
-                  <button
-                    type="button"
-                    className="text-xs bg-gray-300 text-gray-800 rounded-full w-5 h-5 flex items-center justify-center font-bold hover:bg-gray-400"
-                  >
-                    ?
-                  </button>
-                  <div className="absolute z-10 hidden group-hover:block left-6 top-1 bg-gray-700 text-white text-xs rounded px-3 py-2 shadow-lg whitespace-nowrap">
-                    Exclude certain departures from the departure board<br />
-                    Format: <code>line:destination</code><br />
-                    Use <code>*</code> as wildcard<br />
-                    Separate filters with <code>;</code>
-                  </div>
-                </div>
-              </div>
+  /* --------------------- Step 2 --------------------- */
+  return (
+    <main className="max-w-xl mx-auto mt-8 p-6 border rounded-lg bg-grey shadow space-y-6">
+      <h1 className="text-xl font-semibold mb-2">Configure departure board</h1>
 
-              {/* Input itself */}
-              <input
-                type="text"
-                value={config.filter}
-                onChange={(e) => handleFilterChange(config.station.id, e.target.value)}
-                placeholder="e.g. U2:Feldmoching;170:Kieferngarten"
-                className="w-full border rounded-md p-2 text-sm font-mono"
-              />
+      {/* Rows slider */}
+      <section>
+        <label className="block text-sm font-medium mb-1">
+          Rows to display: <span className="font-mono">{config.amount}</span>
+        </label>
+        <input
+          type="range"
+          min={3}
+          max={20}
+          value={config.amount}
+          onChange={(e) => setConfig((c) => ({ ...c, amount: Number(e.target.value) }))}
+          className="w-full"
+        />
+      </section>
 
-            </div>
-        </div>)}
+      {/* Theme & title toggles */}
+      <section className="flex items-center gap-8">
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={config.darkMode}
+            onChange={(e) => setConfig((c) => ({ ...c, darkMode: e.target.checked }))}
+            className="h-4 w-4"
+          />
+          <span className="text-sm">Dark mode</span>
+        </label>
 
-        {/* Global Settings */}
-        <div className="space-y-4">
-          {/* Dark/Light Mode Switch */}
-          <div className="flex items-center space-x-2">
-            <span>Light</span>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" checked={!config.darkMode} className="sr-only peer" onChange={(e)=>handleDarkMode(!e.target.checked)}/>
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent rounded-full peer dark:bg-gray-700 peer-checked:bg-gray-300 transition"></div>
-            </label>
-            <span>Dark</span>
-          </div>
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={config.titleBar !== "no"}
+            onChange={(e) =>
+              setConfig((c) => ({
+                ...c,
+                titleBar: e.target.checked ? selectedStation?.name ?? "" : "no",
+              }))
+            }
+            className="h-4 w-4"
+          />
+          <span className="text-sm">Show title</span>
+        </label>
+      </section>
 
-          {/* Titlebar */}
-          <div className="flex items-center space-x-2">
-            <span>Light</span>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" checked={!config.darkMode} className="sr-only peer" onChange={(e)=>handleDarkMode(!e.target.checked)}/>
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent rounded-full peer dark:bg-gray-700 peer-checked:bg-gray-300 transition"></div>
-            </label>
-            <span>Dark</span>
-          </div>
-
-          {/* Number of Entries */}
-          <div>
-            <p className="text-sm mb-1 text-gray-600">Number of entries to display</p>
-            <input
-              type="number"
-              value={config.amount}
-              onChange={(e) => handleAmountChange(Number(e.target.value))}
-              className="w-65 border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2"
-              style={{ '--tw-ring-color': 'var(--accent)' } as React.CSSProperties}
-            />
-          </div>
-
-          {/* Accent Color Picker */}
-          <div className="flex items-center space-x-4">
-            <p className="text-sm mb-1 text-gray-600">Accent color:</p>
-            <input
-              type="text"
-              value={config.accent}
-              onChange={(e) => handleAccentChange(e.target.value)}
-              placeholder="#Accent color"
-              className="border border-gray-300 rounded-md p-2 w-25 focus:outline-none focus:ring-2"
-              style={{ '--tw-ring-color': 'var(--accent)' } as React.CSSProperties}
-            />
-            <input
-              type="color"
-              value={config.accent}
-              onChange={(e) => handleAccentChange(e.target.value)}
-              className="w-10 h-10 border-0 p-0 cursor-pointer"
-            />
-          </div>
+      {/* Filters text inputs */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium mb-1">Include filters</label>
+          <input
+            className="w-full px-3 py-2 border rounded focus:outline-none focus:ring text-sm font-mono"
+            placeholder="U2:*;Bus100:Marienplatz"
+            value={config.includeFilters.map((ld) => `${ld.line}:${ld.destination}`).join(";")}
+            onChange={(e) => {
+              const arr: LineDest[] = e.target.value
+                .split(";")
+                .filter(Boolean)
+                .map((tok) => {
+                  const [line = "", dest = ""] = tok.split(":");
+                  return { line, destination: dest };
+                });
+              setConfig((c) => ({ ...c, includeFilters: arr }));
+            }}
+          />
         </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Exclude filters</label>
+          <input
+            className="w-full px-3 py-2 border rounded focus:outline-none focus:ring text-sm font-mono"
+            placeholder="Tram*:*"
+            value={config.excludeFilters.map((ld) => `${ld.line}:${ld.destination}`).join(";")}
+            onChange={(e) => {
+              const arr: LineDest[] = e.target.value
+                .split(";")
+                .filter(Boolean)
+                .map((tok) => {
+                  const [line = "", dest = ""] = tok.split(":");
+                  return { line, destination: dest };
+                });
+              setConfig((c) => ({ ...c, excludeFilters: arr }));
+            }}
+          />
+        </div>
+      </section>
 
-        
-        {/* Generated URL Display with Copy + Launch */}
-        <div className="flex items-center space-x-2">
-          <textarea
-            value={boardUrl}
+      {/* Draggable pills */}
+      {lineDestSuggestions.length > 0 && (
+        <section>
+          <p className="text-sm mb-2 font-medium">Drag a badge to include / exclude</p>
+          <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={availableIds} strategy={rectSortingStrategy}>
+              <div className="flex flex-wrap mb-4">
+                {availableIds.map((id) => (
+                  <LineDestPill key={id} id={id} ld={lineDestSuggestions[parseInt(id)]} />
+                ))}
+              </div>
+            </SortableContext>
+
+            {/* Drop zones */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div
+                id="include-drop"
+                className="min-h-[4rem] border-2 border-dashed rounded-md p-2 flex flex-wrap"
+              >
+                {includeIds.map((id) => (
+                  <LineDestPill key={"inc-" + id} id={id} ld={lineDestSuggestions[parseInt(id)]} />
+                ))}
+                {includeIds.length === 0 && (
+                  <p className="text-xs text-muted-foreground m-auto">Drop here to include</p>
+                )}
+              </div>
+              <div
+                id="exclude-drop"
+                className="min-h-[4rem] border-2 border-dashed rounded-md p-2 flex flex-wrap"
+              >
+                {excludeIds.map((id) => (
+                  <LineDestPill key={"exc-" + id} id={id} ld={lineDestSuggestions[parseInt(id)]} />
+                ))}
+                {excludeIds.length === 0 && (
+                  <p className="text-xs text-muted-foreground m-auto">Drop here to exclude</p>
+                )}
+              </div>
+            </div>
+          </DndContext>
+        </section>
+      )}
+
+      {/* URL preview + open */}
+      <section>
+        <label className="block text-sm font-medium mb-1">Live URL</label>
+        <div className="relative">
+          <input
             readOnly
-            className="flex-grow border border-gray-300 rounded-md p-2 text-sm h-24 resize-none focus:outline-none focus:ring-2"
-            style={{ '--tw-ring-color': 'var(--accent)' } as React.CSSProperties}
+            className="w-full px-3 py-2 border rounded text-sm font-mono pr-32 bg-gray-50 dark:bg-gray-800"
+            value={url}
           />
           <button
-            onClick={handleCopy}
-            className="p-2 rounded-md border border-gray-300 hover:bg-gray-100 transition"
-            title="Copy URL"
+            disabled={!url}
+            onClick={() => url && window.open(url, "_blank")}
+            className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded"
           >
-            📋
+            Open
           </button>
         </div>
-
-        {/* Generate Button */}
-        <button
-          style={{ backgroundColor: 'var(--accent)' }}
-          onClick={() => open(boardUrl)}
-          className="w-full text-white py-3 rounded-md hover:opacity-90 transition"
-        >
-          Launch Departure Board
-        </button>
-
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }

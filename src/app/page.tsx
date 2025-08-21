@@ -7,8 +7,8 @@ import { fetchStations, fetchDepartingLines } from "@/lib/mvg";
 import { Manrope, Geist_Mono } from "next/font/google";
 import DepartureBoardCore from "@/components/DepartureBoardCore";
 
-const manrope = Manrope();
-const geistMono = Geist_Mono();
+const manrope = Manrope({subsets: ['latin']});
+const geistMono = Geist_Mono({subsets: ['latin']});
 
 /** helpers */
 function decodeFilters(str: string): LineDest[] {
@@ -97,7 +97,7 @@ export default function DepartureConfigurator() {
       const lds = await fetchDepartingLines(station);
       if (seq !== fetchSeq.current) return; // stale
       setLineDestSuggestions(lds);
-    } catch (e) {
+    } catch {
       if (seq !== fetchSeq.current) return;
       setLdsError("Couldn’t load line suggestions. Please retry.");
       setLineDestSuggestions([]);

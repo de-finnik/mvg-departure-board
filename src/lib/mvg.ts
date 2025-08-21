@@ -1,16 +1,19 @@
-import { platform } from "os";
-import { Config, Departure, Station, LineDest } from "@/types/types"
+import { Departure, Station, LineDest } from "@/types/types"
 
 export async function fetchStations(searchString: string): Promise<Station[]> {
     const response = await fetch(`https://www.mvg.de/api/bgw-pt/v3/locations?query=${encodeURIComponent(searchString)}&locationTypes=STATION`);
     const data = await response.json();
-    return data.map((entry: any) => 
-        ({
+    const stations: Station[] = [];
+    for(const entry of data) {
+        const station: Station = {
             name: entry.name,
             id: entry.globalId, 
             place: entry.place  
-        })
-    );
+
+        }
+        stations.push(station);
+    }
+    return stations;
 }
 
 function filterTestDep(departure: LineDest) {

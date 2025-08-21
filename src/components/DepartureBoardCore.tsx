@@ -7,8 +7,8 @@ import { formatTimeDiff } from "@/lib/utils";
 import { getLineBackground, getLineFontcolor } from "@/lib/colors";
 import { Manrope, Geist_Mono } from "next/font/google";
 
-const manrope = Manrope();
-const geist_mono = Geist_Mono();
+const manrope = Manrope({subsets: ['latin']});
+const geist_mono = Geist_Mono({subsets: ['latin']});
 
 export default function DepartureBoardCore({ config }: { config: Config }) {
   const [departures, setDepartures] = useState<Departure[]>([]);
@@ -38,7 +38,7 @@ export default function DepartureBoardCore({ config }: { config: Config }) {
       setDepartures(d);
       setLoadError(null);
       setIsInitialLoad(false);
-    } catch (e) {
+    } catch {
       setLoadError("Failed to load departures.");
       setIsInitialLoad(false);
     }

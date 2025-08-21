@@ -1,77 +1,70 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import {
-  DndContext,
-  closestCenter,
-  DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  useSortable,
-  rectSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-
+import { useEffect, useMemo, useState } from "react";
 import { Station, LineDest, Config } from "@/types/types";
-
 import { configToURL } from "@/lib/parseConfig";
 import { fetchStations } from "@/lib/mvg";
-import { fetchDepartingLines, mvvFetchDepartingLines } from "@/lib/mvv";
+import { fetchDepartingLines } from "@/lib/mvv";
+import { Manrope, Geist_Mono } from "next/font/google";
 
-/**********************************************************************
- * Small, dependency‑free UI: plain HTML elements styled with Tailwind *
- **********************************************************************/
+const manrope = Manrope();
+const geistMono = Geist_Mono();
 
-/** Draggable pill -------------------------------------------------- */
-function LineDestPill({ id, ld }: { id: string; ld: LineDest }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id });
-  const style: React.CSSProperties = {
-    transform: CSS.Translate.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : 1,
-  };
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      className="cursor-grab select-none rounded-full px-3 py-1 text-xs font-mono mr-2 mb-2 border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700"
-    >
-      {ld.line}:{ld.destination}
-    </div>
-  );
+/** helpers */
+function decodeFilters(str: string): LineDest[] {
+  if (!str.trim()) return [];
+  return str.split(";").filter(Boolean).map((tok) => {
+    const [line = "", destination = ""] = tok.split(":");
+    return { line, destination };
+  });
+}
+function patternToRegex(pattern: string): RegExp {
+  const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
+  return new RegExp(`^${escaped}$`, "i");
+}
+function matches(ld: LineDest, f: LineDest) {
+  const lineRe = patternToRegex(f.line || "*");
+  const destRe = patternToRegex(f.destination || "*");
+  return lineRe.test(ld.line) && destRe.test(ld.destination);
+}
+type Tri = "neutral" | "include" | "exclude";
+function triClasses(state: Tri) {
+  switch (state) {
+    case "include":
+      return "bg-green-900/30 text-green-200 border-green-700";
+    case "exclude":
+      return "bg-red-900/30 text-red-200 border-red-700";
+    default:
+      return "bg-gray-800 text-gray-100 border-gray-700";
+  }
 }
 
-/* ------------------------------------------------------------------ */
 export default function DepartureConfigurator() {
-  /* ------------ wizard step ------------- */
   const [step, setStep] = useState<1 | 2>(1);
 
-  /* ------------ station search ---------- */
+  // station search
   const [stationQuery, setStationQuery] = useState("");
   const [stationSuggestions, setStationSuggestions] = useState<Station[]>([]);
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
 
-  /* ------------ config ------------------ */
+  // config: UI always dark; darkMode controls BOARD theme only
   const [config, setConfig] = useState<Config>(() => ({
     station: { id: "" },
-    amount: 8,
-    darkMode: false,
-    titleBar: "",
+    amount: 5,               // <- default 5
+    darkMode: false,         // <- defaults from system below
+    titleBar: "",            // <- empty means OFF
     includeFilters: [],
     excludeFilters: [],
   }));
 
-  /* ------------ station suggestions fetch */
+  // default board theme from system preference (configurator stays dark)
+  useEffect(() => {
+    const prefersDark = typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+    setConfig((c) => ({ ...c, darkMode: !!prefersDark }));
+  }, []);
+
+  // station lookup
   useEffect(() => {
     if (!stationQuery.trim()) {
       setStationSuggestions([]);
@@ -84,246 +77,343 @@ export default function DepartureConfigurator() {
     return () => clearTimeout(t);
   }, [stationQuery]);
 
-  /* ------------ line‑dest pills ------------ */
+  // lines at station
   const [lineDestSuggestions, setLineDestSuggestions] = useState<LineDest[]>([]);
-  const [availableIds, setAvailableIds] = useState<string[]>([]);
-  const [includeIds, setIncludeIds] = useState<string[]>([]);
-  const [excludeIds, setExcludeIds] = useState<string[]>([]);
+  const [pillState, setPillState] = useState<Record<number, Tri>>({});
 
   useEffect(() => {
     if (!selectedStation) return;
     (async () => {
       const lds = await fetchDepartingLines(selectedStation);
       setLineDestSuggestions(lds);
-      const ids = lds.map((_, i) => `${i}`);
-      setAvailableIds(ids);
-      setIncludeIds([]);
-      setExcludeIds([]);
+      setPillState({});
       setConfig((c) => ({
         ...c,
         station: selectedStation,
-        titleBar: selectedStation.name ?? "",
+        // IMPORTANT: keep titleBar empty by default; only set when user toggles on
         includeFilters: [],
         excludeFilters: [],
       }));
+      setStep(2);
     })();
   }, [selectedStation]);
 
-  /* ------------ drag end ----------------- */
-  function handleDragEnd(e: DragEndEvent) {
-    const { active, over } = e;
-    if (!over) return;
+  // manual filters
+  const [includeText, setIncludeText] = useState("");
+  const [excludeText, setExcludeText] = useState("");
+  const manualIncludes = useMemo(() => decodeFilters(includeText), [includeText]);
+  const manualExcludes = useMemo(() => decodeFilters(excludeText), [excludeText]);
 
-    if (over.id === "include-drop") {
-      if (!includeIds.includes(active.id as string)) {
-        setIncludeIds((prev) => [...prev, active.id as string]);
-        setConfig((c) => ({
-          ...c,
-          includeFilters: [
-            ...c.includeFilters,
-            lineDestSuggestions[parseInt(active.id as string)],
-          ],
-        }));
-      }
-    } else if (over.id === "exclude-drop") {
-      if (!excludeIds.includes(active.id as string)) {
-        setExcludeIds((prev) => [...prev, active.id as string]);
-        setConfig((c) => ({
-          ...c,
-          excludeFilters: [
-            ...c.excludeFilters,
-            lineDestSuggestions[parseInt(active.id as string)],
-          ],
-        }));
-      }
-    }
+  function computePillState(idx: number): Tri {
+    const explicit = pillState[idx];
+    if (explicit && explicit !== "neutral") return explicit;
+    const ld = lineDestSuggestions[idx];
+    if (manualExcludes.some((f) => matches(ld, f))) return "exclude";
+    if (manualIncludes.some((f) => matches(ld, f))) return "include";
+    return "neutral";
+  }
+  function onPillClick(idx: number) {
+    setPillState((prev) => {
+      const current = prev[idx] ?? "neutral";
+      const next: Tri = current === "neutral" ? "include" : current === "include" ? "exclude" : "neutral";
+      return { ...prev, [idx]: next };
+    });
   }
 
-  /* ------------ url preview -------------- */
-  const url = useMemo(() => (config.station.id ? `${configToURL(config)}` : ""), [config]);
+  // URL (manual + explicit pills)
+  const url = useMemo(() => {
+    if (!config.station.id) return "";
+    const explicitIncludes: LineDest[] = [];
+    const explicitExcludes: LineDest[] = [];
+    Object.entries(pillState).forEach(([k, v]) => {
+      const ld = lineDestSuggestions[Number(k)];
+      if (!ld) return;
+      if (v === "include") explicitIncludes.push(ld);
+      if (v === "exclude") explicitExcludes.push(ld);
+    });
+    const merged: Config = {
+      ...config,
+      includeFilters: [...manualIncludes, ...explicitIncludes],
+      excludeFilters: [...manualExcludes, ...explicitExcludes],
+    };
+    return configToURL(merged);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config, pillState, includeText, excludeText, lineDestSuggestions]);
 
-  /* ------------------------------------------------------------------ */
-  /*                         RENDER                                     */
-  /* ------------------------------------------------------------------ */
-  if (step === 1) {
-    return (
-      <main className="max-w-md mx-auto mt-10 p-6 border rounded-lg bg-white dark:bg-gray-900 dark:text-white shadow">
-        <h1 className="text-xl font-semibold mb-4">Choose station</h1>
-        <input
-          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring"
-          placeholder="Start typing station name…"
-          value={stationQuery}
-          onChange={(e) => setStationQuery(e.target.value)}
-        />
-        {stationSuggestions.length > 0 && (
-          <ul className="mt-2 border rounded max-h-56 overflow-y-auto divide-y">
-            {stationSuggestions.map((s) => (
-              <li key={s.id}>
+  async function copyUrl() {
+    if (!url) return;
+    try { await navigator.clipboard.writeText(url); } catch {}
+  }
+
+  return (
+    <main className={`bg-gray-950 text-white min-h-dvh ${manrope.className}`}>
+      <div className="mx-auto max-w-5xl px-4 py-8">
+        {/* Step 1: choose station */}
+        {step === 1 && (
+          <>
+          <div className="select-none mb-8 text-center">
+            <h1 className="text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight">
+              <span className="underline decoration-blue-500/70 decoration-[6px] underline-offset-[10px]">
+                abfahrt
+              </span>
+              <span className="text-blue-500">.live</span>
+            </h1>
+
+            {/* optional subline */}
+            <p className="mt-2 text-sm text-gray-400">
+              Generate your own MVG departure board.
+            </p>
+          </div>
+          <section className="rounded-xl border border-gray-800 bg-gray-900 p-5 shadow-sm">
+            <h2 className="text-lg font-semibold mb-3">Station</h2>
+            <input
+              className="w-full px-3 py-2 rounded-md border border-gray-700 bg-gray-950 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Search for a station…"
+              value={stationQuery}
+              onChange={(e) => setStationQuery(e.target.value)}
+              autoFocus
+            />
+            {stationQuery && stationSuggestions.length === 0 && (
+              <p className="mt-2 text-sm text-gray-400">Searching…</p>
+            )}
+            {stationSuggestions.length > 0 && (
+              <ul className="mt-2 rounded-md border border-gray-800 divide-y divide-gray-800 max-h-60 overflow-y-auto">
+                {stationSuggestions.map((s) => (
+                  <li key={s.id}>
+                    <button
+                      className="w-full text-left px-3 py-2 hover:bg-gray-800"
+                      onClick={() => setSelectedStation(s)}
+                    >
+                      <div className="font-medium">{s.name}</div>
+                      {s.place && <div className="text-xs text-gray-400">{s.place}</div>}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          </>
+        )}
+
+        {/* Step 2: two columns (Display + Live). No top Station card. */}
+        {step === 2 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Display (left) */}
+            <section className="rounded-xl border border-gray-800 bg-gray-900 p-5 shadow-sm">
+              <div className="mb-3 select-none">
+                <h2 className="text-2xl md:text-4xl font-extrabold tracking-tight leading-none">
+                  <span className="underline decoration-blue-500/70 decoration-[4px] underline-offset-[6px]">
+                    abfahrt
+                  </span>
+                  <span className="text-blue-500">.live</span>
+                </h2>
+              </div>
+              {/* Station summary moved here */}
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div className="text-sm text-gray-300 flex flex-wrap items-center gap-2">
+                  <span className="font-medium">Station:</span>
+                  <span className="px-2 py-1 rounded bg-gray-800">
+                    {selectedStation?.name}
+                  </span>
+                  {selectedStation?.place && (
+                    <span className="px-2 py-1 rounded bg-gray-800">
+                      {selectedStation.place}
+                    </span>
+                  )}
+                </div>
                 <button
-                  className="w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  className="text-sm px-3 py-1.5 rounded-md border border-gray-700 hover:bg-gray-800"
                   onClick={() => {
-                    setSelectedStation(s);
-                    setStep(2);
+                    setSelectedStation(null);
+                    setStationQuery("");
+                    setLineDestSuggestions([]);
+                    setPillState({});
+                    setIncludeText("");
+                    setExcludeText("");
+                    setConfig((c) => ({
+                      ...c,
+                      station: { id: "" },
+                      amount: 5,          // keep default on reset
+                      titleBar: "",       // empty means OFF
+                      includeFilters: [],
+                      excludeFilters: [],
+                    }));
+                    setStep(1);
                   }}
                 >
-                  {s.name} {s.place && <span className="text-xs text-gray-500">({s.place})</span>}
+                  Change
                 </button>
-              </li>
-            ))}
-          </ul>
+              </div>
+
+              <h2 className="text-lg font-semibold mb-4">Display</h2>
+
+              {/* Rows */}
+              <div className="mb-5">
+                <label className="block text-sm font-medium mb-1">
+                  Rows to display:{" "}
+                  <span className={`${geistMono.className} text-xs`}>{config.amount}</span>
+                </label>
+                <input
+                  type="range"
+                  min={3}
+                  max={20}
+                  value={config.amount}
+                  onChange={(e) => setConfig((c) => ({ ...c, amount: Number(e.target.value) }))}
+                  className="w-full"
+                />
+              </div>
+
+              {/* Theme (BOARD only) */}
+              <div className="mb-5">
+                <label className="flex items-center gap-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={config.darkMode}
+                    onChange={(e) => setConfig((c) => ({ ...c, darkMode: e.target.checked }))}
+                    className="h-4 w-4"
+                  />
+                  <span className="text-sm">Dark mode (board)</span>
+                </label>
+                <p className="mt-1 text-xs text-gray-400">
+                  Defaults to your system preference. Toggling changes the preview & URL; the configurator stays dark.
+                </p>
+              </div>
+
+              {/* Title bar (off by default; empty string) */}
+              <div className="space-y-2">
+                <label className="flex items-center gap-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={config.titleBar !== ""}  // empty = OFF
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      setConfig((c) => ({
+                        ...c,
+                        titleBar: on
+                          ? (c.titleBar || selectedStation?.name || "") // set once from station if empty
+                          : "",                                         // turn OFF -> empty
+                      }));
+                    }}
+                    className="h-4 w-4"
+                  />
+                  <span className="text-sm">Show title</span>
+                </label>
+                {config.titleBar !== "" && (
+                  <input
+                    className={`w-full px-3 py-2 rounded-md border border-gray-700 bg-gray-950 text-sm ${geistMono.className}`}
+                    value={config.titleBar}
+                    onChange={(e) => setConfig((c) => ({ ...c, titleBar: e.target.value }))}
+                  />
+                )}
+              </div>
+            </section>
+
+            {/* Live (right) */}
+            <section className="rounded-xl border border-gray-800 bg-gray-900 p-5 shadow-sm">
+              <h2 className="text-lg font-semibold mb-4">Live</h2>
+
+              <div className="rounded-md overflow-hidden border border-gray-800">
+                <iframe key={url} src={url || "about:blank"} className="w-full h-59 bg-gray-950" />
+              </div>
+
+              <div className="mt-4">
+                <label className="block text-sm font-medium mb-1">URL</label>
+                <div className="relative">
+                  <input
+                    readOnly
+                    className={`w-full pr-36 px-3 py-2 rounded-md border border-gray-700 bg-gray-950 text-xs ${geistMono.className}`}
+                    value={url}
+                  />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-2">
+                    <button
+                      disabled={!url}
+                      onClick={copyUrl}
+                      className="px-3 py-1.5 rounded-md text-sm border border-gray-700 hover:bg-gray-800 disabled:opacity-50"
+                    >
+                      Copy
+                    </button>
+                    <button
+                      disabled={!url}
+                      onClick={() => url && window.open(url, "_blank")}
+                      className="px-3 py-1.5 rounded-md text-sm bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-700"
+                    >
+                      Open
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
         )}
-      </main>
-    );
-  }
 
-  /* --------------------- Step 2 --------------------- */
-  return (
-    <main className="max-w-xl mx-auto mt-8 p-6 border rounded-lg bg-grey shadow space-y-6">
-      <h1 className="text-xl font-semibold mb-2">Configure departure board</h1>
-
-      {/* Rows slider */}
-      <section>
-        <label className="block text-sm font-medium mb-1">
-          Rows to display: <span className="font-mono">{config.amount}</span>
-        </label>
-        <input
-          type="range"
-          min={3}
-          max={20}
-          value={config.amount}
-          onChange={(e) => setConfig((c) => ({ ...c, amount: Number(e.target.value) }))}
-          className="w-full"
-        />
-      </section>
-
-      {/* Theme & title toggles */}
-      <section className="flex items-center gap-8">
-        <label className="flex items-center gap-2 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={config.darkMode}
-            onChange={(e) => setConfig((c) => ({ ...c, darkMode: e.target.checked }))}
-            className="h-4 w-4"
-          />
-          <span className="text-sm">Dark mode</span>
-        </label>
-
-        <label className="flex items-center gap-2 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={config.titleBar !== "no"}
-            onChange={(e) =>
-              setConfig((c) => ({
-                ...c,
-                titleBar: e.target.checked ? selectedStation?.name ?? "" : "no",
-              }))
-            }
-            className="h-4 w-4"
-          />
-          <span className="text-sm">Show title</span>
-        </label>
-      </section>
-
-      {/* Filters text inputs */}
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium mb-1">Include filters</label>
-          <input
-            className="w-full px-3 py-2 border rounded focus:outline-none focus:ring text-sm font-mono"
-            placeholder="U2:*;Bus100:Marienplatz"
-            value={config.includeFilters.map((ld) => `${ld.line}:${ld.destination}`).join(";")}
-            onChange={(e) => {
-              const arr: LineDest[] = e.target.value
-                .split(";")
-                .filter(Boolean)
-                .map((tok) => {
-                  const [line = "", dest = ""] = tok.split(":");
-                  return { line, destination: dest };
-                });
-              setConfig((c) => ({ ...c, includeFilters: arr }));
-            }}
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Exclude filters</label>
-          <input
-            className="w-full px-3 py-2 border rounded focus:outline-none focus:ring text-sm font-mono"
-            placeholder="Tram*:*"
-            value={config.excludeFilters.map((ld) => `${ld.line}:${ld.destination}`).join(";")}
-            onChange={(e) => {
-              const arr: LineDest[] = e.target.value
-                .split(";")
-                .filter(Boolean)
-                .map((tok) => {
-                  const [line = "", dest = ""] = tok.split(":");
-                  return { line, destination: dest };
-                });
-              setConfig((c) => ({ ...c, excludeFilters: arr }));
-            }}
-          />
-        </div>
-      </section>
-
-      {/* Draggable pills */}
-      {lineDestSuggestions.length > 0 && (
-        <section>
-          <p className="text-sm mb-2 font-medium">Drag a badge to include / exclude</p>
-          <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={availableIds} strategy={rectSortingStrategy}>
-              <div className="flex flex-wrap mb-4">
-                {availableIds.map((id) => (
-                  <LineDestPill key={id} id={id} ld={lineDestSuggestions[parseInt(id)]} />
-                ))}
-              </div>
-            </SortableContext>
-
-            {/* Drop zones */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div
-                id="include-drop"
-                className="min-h-[4rem] border-2 border-dashed rounded-md p-2 flex flex-wrap"
-              >
-                {includeIds.map((id) => (
-                  <LineDestPill key={"inc-" + id} id={id} ld={lineDestSuggestions[parseInt(id)]} />
-                ))}
-                {includeIds.length === 0 && (
-                  <p className="text-xs text-muted-foreground m-auto">Drop here to include</p>
-                )}
-              </div>
-              <div
-                id="exclude-drop"
-                className="min-h-[4rem] border-2 border-dashed rounded-md p-2 flex flex-wrap"
-              >
-                {excludeIds.map((id) => (
-                  <LineDestPill key={"exc-" + id} id={id} ld={lineDestSuggestions[parseInt(id)]} />
-                ))}
-                {excludeIds.length === 0 && (
-                  <p className="text-xs text-muted-foreground m-auto">Drop here to exclude</p>
-                )}
+        {/* Bottom: Filters */}
+        {step === 2 && (
+          <section className="mt-6 rounded-xl border border-gray-800 bg-gray-900 p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-lg font-semibold">Filters</h2>
+              <div className="text-xs text-gray-400">
+                Click a pill to toggle: include (green) / exclude (red). Wildcards in the fields
+                colour matching pills automatically; exclude wins if both apply.
               </div>
             </div>
-          </DndContext>
-        </section>
-      )}
 
-      {/* URL preview + open */}
-      <section>
-        <label className="block text-sm font-medium mb-1">Live URL</label>
-        <div className="relative">
-          <input
-            readOnly
-            className="w-full px-3 py-2 border rounded text-sm font-mono pr-32 bg-gray-50 dark:bg-gray-800"
-            value={url}
-          />
-          <button
-            disabled={!url}
-            onClick={() => url && window.open(url, "_blank")}
-            className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded"
-          >
-            Open
-          </button>
-        </div>
-      </section>
+            {/* Manual fields */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Include</label>
+                <input
+                  className={`w-full px-3 py-2 rounded-md border border-gray-700 bg-gray-950 text-sm ${geistMono.className}`}
+                  placeholder="U2:*;Bus100:Marienplatz"
+                  value={includeText}
+                  onChange={(e) => setIncludeText(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Exclude</label>
+                <input
+                  className={`w-full px-3 py-2 rounded-md border border-gray-700 bg-gray-950 text-sm ${geistMono.className}`}
+                  placeholder="Tram*:*"
+                  value={excludeText}
+                  onChange={(e) => setExcludeText(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Pills */}
+            <div className="mt-4">
+              {lineDestSuggestions.length === 0 ? (
+                <p className="text-sm text-gray-400">No lines available (yet)…</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {lineDestSuggestions.map((ld, idx) => {
+                    const state = computePillState(idx);
+                    return (
+                      <button
+                        key={`${ld.line}-${ld.destination}-${idx}`}
+                        onClick={() => onPillClick(idx)}
+                        className={`cursor-pointer select-none rounded-full px-3 py-1 text-xs border ${triClasses(state)} ${geistMono.className}`}
+                        title={`${ld.line}:${ld.destination}`}
+                      >
+                        {ld.line}:{ld.destination}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Quick actions */}
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button onClick={() => setPillState({})} className="text-sm px-3 py-1.5 rounded-md border border-gray-700 hover:bg-gray-800">
+                Clear pill selections
+              </button>
+              <button onClick={() => { setIncludeText(""); setExcludeText(""); }} className="text-sm px-3 py-1.5 rounded-md border border-gray-700 hover:bg-gray-800">
+                Clear text filters
+              </button>
+            </div>
+          </section>
+        )}
+      </div>
     </main>
   );
 }

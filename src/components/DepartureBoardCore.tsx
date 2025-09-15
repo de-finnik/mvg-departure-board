@@ -47,8 +47,8 @@ export default function DepartureBoardCore({ config }: { config: Config }) {
     }
   }, [
     config.station,
-    includeKey,
-    excludeKey,
+    config.includeFilters,
+    config.excludeFilters,
     config.amount,
   ]);
 
@@ -67,7 +67,7 @@ export default function DepartureBoardCore({ config }: { config: Config }) {
     }, 30_000);
 
     // live clock only if title is non-empty
-    let clockId = window.setInterval(() => {
+    const clockId = window.setInterval(() => {
       const now = new Date();
       setCurrentTime(now);
       if(config.titleBar) {

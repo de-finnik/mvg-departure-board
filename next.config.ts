@@ -1,15 +1,38 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
-  async rewrites() {
+export default {
+  async redirects() {
     return [
       {
-        source: '/mmv/:path*',
-        destination: 'https://efa.mvv-muenchen.de/:path'
-      }
+        source: '/glh',
+        destination: '/board?station=de%3A09162%3A430&amount=5&theme=dark&include=U*%3A&exclude=',
+        permanent: true, // true -> 308 (permanent), false -> 307 (temporary)
+      },
+      {
+        source: '/glh-light',
+        destination: '/board?station=de%3A09162%3A430&amount=5&theme=light&include=U*%3A&exclude=',
+        permanent: true, // true -> 308 (permanent), false -> 307 (temporary)
+      },
+      {
+        source: '/glh-bus',
+        destination: '/board?station=de%3A09162%3A445&amount=5&theme=dark&include=&exclude=*%3AKieferngarten',
+        permanent: true, // true -> 308 (permanent), false -> 307 (temporary)
+      },
+      {
+        source: '/glh-bus-light',
+        destination: '/board?station=de%3A09162%3A445&amount=5&theme=light&include=&exclude=*%3AKieferngarten',
+        permanent: true, // true -> 308 (permanent), false -> 307 (temporary)
+      },
+      {
+        source: '/gf',
+        destination: '//board?station=de%3A09184%3A460&amount=5&theme=dark&include=U*%3A*&exclude=',
+        permanent: true, // true -> 308 (permanent), false -> 307 (temporary)
+      },
+      {
+        source: '/gf-light',
+        destination: '//board?station=de%3A09184%3A460&amount=5&theme=light&include=U*%3A*&exclude=',
+        permanent: true, // true -> 308 (permanent), false -> 307 (temporary)
+      },
     ];
   },
-  /* config options here */
 };
-
-export default nextConfig;

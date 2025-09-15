@@ -12,6 +12,9 @@ const geist_mono = Geist_Mono({subsets: ['latin']});
 
 export default function DepartureBoardCore({ config }: { config: Config }) {
   const [departures, setDepartures] = useState<Departure[]>([]);
+  function departuresInFuture() {
+    return departures.filter(dep=>dep.time.getTime() >= Date.now());
+  }
   const [currentTime, setCurrentTime] = useState(new Date());
   const [timeString, setTimeString] = useState("");
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -39,7 +42,7 @@ export default function DepartureBoardCore({ config }: { config: Config }) {
       setLoadError(null);
       setIsInitialLoad(false);
     } catch {
-      setLoadError("Failed to load departures.");
+      setLoadError("Failed to fetch departures.");
       setIsInitialLoad(false);
     }
   }, [
@@ -49,7 +52,7 @@ export default function DepartureBoardCore({ config }: { config: Config }) {
     config.amount,
   ]);
 
-  // Kick off fetch + poll every 10s
+  // Kick off fetch + poll every 30s
   useEffect(() => {
     let cancelled = false;
 
@@ -59,16 +62,15 @@ export default function DepartureBoardCore({ config }: { config: Config }) {
       }
     })();
 
-    const id = window.setInterval(() => {
+    const fetchThirty = window.setInterval(() => {
       if (!cancelled) refreshNow();
-    }, 10_000);
+    }, 30_000);
 
     // live clock only if title is non-empty
-    let clockId: number | undefined;
-    if (config.titleBar) {
-      clockId = window.setInterval(() => {
-        const now = new Date();
-        setCurrentTime(now);
+    let clockId = window.setInterval(() => {
+      const now = new Date();
+      setCurrentTime(now);
+      if(config.titleBar) {
         setTimeString(
           now.toLocaleTimeString([], {
             hour: "2-digit",
@@ -76,14 +78,12 @@ export default function DepartureBoardCore({ config }: { config: Config }) {
             second: "2-digit",
           })
         );
-      }, 1000);
-    } else {
-      setTimeString("");
-    }
+      }
+    }, 1000);
 
     return () => {
       cancelled = true;
-      window.clearInterval(id);
+      window.clearInterval(fetchThirty);
       if (clockId) window.clearInterval(clockId);
     };
   }, [refreshNow, config.titleBar]);
@@ -101,12 +101,12 @@ export default function DepartureBoardCore({ config }: { config: Config }) {
   return (
     <div
       className={[
-        "flex items-center justify-center p-4",
+        "w-full md:max-w-md flex items-center justify-center p-4",
         config.darkMode ? "bg-gray-900 text-white" : "bg-white text-gray-900",
         manrope.className,
       ].join(" ")}
     >
-      <div className="w-screen max-w-md flex flex-col space-y-2" aria-live="polite">
+      <div className="w-full md:max-w-md flex flex-col space-y-2 min-w-0" aria-live="polite">
         {/* Title bar */}
         {config.titleBar !== "" && (
           <div className="flex justify-between items-center mb-2 text-sm text-gray-500 dark:text-gray-400">
@@ -141,7 +141,7 @@ export default function DepartureBoardCore({ config }: { config: Config }) {
           </div>
         ) : (
           // Rows
-          departures.map(({ linedest, time }, i) => (
+          departuresInFuture().slice(0, config.amount).map(({ linedest, time }, i) => (
             <div key={i} className="flex items-center text-[1.1rem] leading-tight">
               <div
                 className="w-[3.5rem] h-[1.8rem] rounded-md font-bold mr-4 flex items-center justify-center"
@@ -152,7 +152,7 @@ export default function DepartureBoardCore({ config }: { config: Config }) {
               >
                 {linedest.line}
               </div>
-              <div className="font-semibold flex-1 truncate">{linedest.destination}</div>
+              <div className="font-semibold flex-1 min-w-0 truncate">{linedest.destination}</div>
               <div className={`w-[3.5rem] text-right ${geist_mono.className}`}>
                 {formatTimeDiff(currentTime, time)}
               </div>

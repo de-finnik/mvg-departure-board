@@ -64,9 +64,6 @@ export async function fetchDepartures(station: Station, includeFilters: LineDest
                 continue;
             }
             departures.push(departure);
-            if(departures.length == min) {
-                break outer;
-            }
         }
         const lastDeparture = data[data.length - 1].realtimeDepartureTime;
         const now = Date.now();

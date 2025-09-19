@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo } from "react";
+import { Suspense, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { searchParamToConfig } from "@/lib/parseConfig";
 import DepartureBoardCore from "@/components/DepartureBoardCore";
@@ -8,6 +8,12 @@ import DepartureBoardCore from "@/components/DepartureBoardCore";
 function BoardPageInner() {
   const sp = useSearchParams();
   const config = useMemo(() => searchParamToConfig(sp), [sp]);
+
+  useEffect(() => {
+    if(config.titleBar) {
+      document.title = `${config.titleBar} | abfahrt.live`;
+    }
+  }, [config.titleBar]);
 
   return (
     <div

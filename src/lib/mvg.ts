@@ -1,7 +1,28 @@
 import { Departure, Station, LineDest } from "@/types/types"
 
+async function fetchWithRetry(url: string, retries = 3, delay = 1000): Promise<Response> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const response = await fetch(url);
+    if (response.ok) {
+      return response;
+    }
+
+    // If we got a rate-limit / overload error, wait and retry
+    if (response.status === 429 || response.status === 509 || response.status >= 500) {
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, delay * 2 ** attempt));
+        continue;
+      }
+    }
+
+    // If not retriable, throw immediately
+    throw new Error(`Request failed with status ${response.status}`);
+  }
+  throw new Error("Max retries reached");
+}
+
 export async function fetchStations(searchString: string): Promise<Station[]> {
-    const response = await fetch(`https://www.mvg.de/api/bgw-pt/v3/locations?query=${encodeURIComponent(searchString)}&locationTypes=STATION`);
+    const response = await fetchWithRetry(`https://www.mvg.de/api/bgw-pt/v3/locations?query=${encodeURIComponent(searchString)}&locationTypes=STATION`);
     const data = await response.json();
     const stations: Station[] = [];
     for(const entry of data) {
@@ -26,7 +47,7 @@ export async function fetchDepartures(station: Station, includeFilters: LineDest
     const departures: Departure[] = [];
     let offset = 0;
     outer: while (departures.length < min) {
-        const response = await fetch(`https://www.mvg.de/api/bgw-pt/v3/departures?globalId=${station.id}&offsetInMinutes=${offset}&transportTypes=UBAHN,REGIONAL_BUS,BUS,TRAM,SBAHN`);
+        const response = await fetchWithRetry(`https://www.mvg.de/api/bgw-pt/v3/departures?globalId=${station.id}&offsetInMinutes=${offset}&transportTypes=UBAHN,REGIONAL_BUS,BUS,TRAM,SBAHN`);
         const data = await response.json();
         for (const entry of data) {
             if(entry.cancelled) {
@@ -73,7 +94,7 @@ export async function fetchDepartures(station: Station, includeFilters: LineDest
 }
 
 export async function fetchDepartingLines(station: Station): Promise<LineDest[]> {
-    const response = await fetch(`https://www.mvg.de/api/bgw-pt/v3/departures?globalId=${station.id}&transportTypes=UBAHN,REGIONAL_BUS,BUS,TRAM,SBAHN&limit=80`);
+    const response = await fetchWithRetry(`https://www.mvg.de/api/bgw-pt/v3/departures?globalId=${station.id}&transportTypes=UBAHN,REGIONAL_BUS,BUS,TRAM,SBAHN&limit=80`);
     const data = await response.json();
     const linedests: LineDest[] = [];
     for (const entry of data) {

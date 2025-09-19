@@ -73,7 +73,7 @@ export default function DepartureConfigurator() {
     const t = setTimeout(async () => {
       const res = await fetchStations(stationQuery.trim());
       setStationSuggestions(res);
-    }, 250);
+    }, 450);
     return () => clearTimeout(t);
   }, [stationQuery]);
 

@@ -41,8 +41,20 @@ export default function DepartureBoardCore({ config }: { config: Config }) {
       setDepartures(d);
       setLoadError(null);
       setIsInitialLoad(false);
-    } catch {
-      setLoadError("Failed to fetch departures.");
+    } catch (err) {
+      let message = "Failed to fetch departures.";
+  
+      if (err instanceof Error) {
+        if (err.message.includes("509") || err.message.includes("429")) {
+          message = "Too many requests – please wait a moment and try again.";
+        } else if (err.message.includes("5")) {
+          message = "MVG servers are currently unavailable.";
+        } else if (err.message.includes("4")) {
+          message = "Invalid request – please check your configuration.";
+        }
+      }
+      
+      setLoadError(message);
       setIsInitialLoad(false);
     }
   }, [

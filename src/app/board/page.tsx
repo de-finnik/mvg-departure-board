@@ -18,7 +18,7 @@ function BoardPageInner() {
   return (
     <div
       className={[
-        "min-h-dvh grid place-items-center",
+        "w-full max-w-full flex min-h-dvh items-center justify-center",
         config.darkMode ? "bg-gray-900 text-white" : "bg-white text-gray-900",
       ].join(" ")}
     >

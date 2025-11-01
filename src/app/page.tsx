@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Station, LineDest, Config } from "@/types/types";
 import { configToURL } from "@/lib/parseConfig";
-import { fetchStations, fetchDepartingLines } from "@/lib/mvg";
 import { Manrope, Geist_Mono } from "next/font/google";
+import { mvgService, fetchStations } from "@/services/mvg.service";
+import confetti from "canvas-confetti";
+
 import DepartureBoardCore from "@/components/DepartureBoardCore";
 
 const manrope = Manrope({subsets: ['latin']});
@@ -22,12 +24,8 @@ function patternToRegex(pattern: string): RegExp {
   const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
   return new RegExp(`^${escaped}$`, "i");
 }
-function matches(ld: LineDest, f: LineDest) {
-  const lineRe = patternToRegex(f.line || "*");
-  const destRe = patternToRegex(f.destination || "*");
-  return lineRe.test(ld.line) && destRe.test(ld.destination);
-}
 type Tri = "neutral" | "include" | "exclude";
+type FilterMode = "simple" | "advanced";
 function triClasses(state: Tri) {
   switch (state) {
     case "include":
@@ -57,6 +55,8 @@ export default function DepartureConfigurator() {
     excludeFilters: [],
   }));
 
+  const [filterMode, setFilterMode] = useState<FilterMode>("simple");
+
   // default board theme from system preference (configurator stays dark)
   useEffect(() => {
     const prefersDark = typeof window !== "undefined" &&
@@ -77,34 +77,18 @@ export default function DepartureConfigurator() {
     return () => clearTimeout(t);
   }, [stationQuery]);
 
+  useEffect(() => {
+    const handleUpdate = () => {
+      setLineDestSuggestions(mvgService.getAvailableLines());
+      setLdsLoading(false);
+    };
+    mvgService.subscribe(handleUpdate);
+  }, []);
+
   // lines at station + loading/error
   const [lineDestSuggestions, setLineDestSuggestions] = useState<LineDest[]>([]);
   const [pillState, setPillState] = useState<Record<number, Tri>>({});
   const [ldsLoading, setLdsLoading] = useState(false);
-  const [ldsError, setLdsError] = useState<string | null>(null);
-  const fetchSeq = useRef(0); // race guard
-
-  async function loadLineDestSuggestions(station: Station) {
-    fetchSeq.current += 1;
-    const seq = fetchSeq.current;
-
-    setLdsLoading(true);
-    setLdsError(null);
-    setLineDestSuggestions([]); // ensure skeletons show
-    setPillState({});           // reset explicit toggles for new station
-
-    try {
-      const lds = await fetchDepartingLines(station);
-      if (seq !== fetchSeq.current) return; // stale
-      setLineDestSuggestions(lds);
-    } catch {
-      if (seq !== fetchSeq.current) return;
-      setLdsError("Couldn’t load line suggestions. Please retry.");
-      setLineDestSuggestions([]);
-    } finally {
-      if (seq === fetchSeq.current) setLdsLoading(false);
-    }
-  }
 
   // select station: go to step 2 immediately, update config, then fetch suggestions in background
   function selectStation(s: Station) {
@@ -119,7 +103,8 @@ export default function DepartureConfigurator() {
     setIncludeText("");
     setExcludeText("");
     setStep(2);                // show step 2 immediately
-    void loadLineDestSuggestions(s); // fetch pills in background
+    setLdsLoading(true);
+    mvgService.initialize(s.id);
   }
 
   // manual filters
@@ -129,12 +114,7 @@ export default function DepartureConfigurator() {
   const manualExcludes = useMemo(() => decodeFilters(excludeText), [excludeText]);
 
   function computePillState(idx: number): Tri {
-    const explicit = pillState[idx];
-    if (explicit && explicit !== "neutral") return explicit;
-    const ld = lineDestSuggestions[idx];
-    if (manualExcludes.some((f) => matches(ld, f))) return "exclude";
-    if (manualIncludes.some((f) => matches(ld, f))) return "include";
-    return "neutral";
+    return pillState[idx] ?? "neutral";
   }
   function onPillClick(idx: number) {
     setPillState((prev) => {
@@ -148,6 +128,7 @@ export default function DepartureConfigurator() {
   const { previewConfig, url } = useMemo(() => {
     if (!config.station.id) return { previewConfig: null, url: "" };
 
+    // collect explicit pill intents
     const explicitIncludes: LineDest[] = [];
     const explicitExcludes: LineDest[] = [];
     Object.entries(pillState).forEach(([k, v]) => {
@@ -157,20 +138,49 @@ export default function DepartureConfigurator() {
       if (v === "exclude") explicitExcludes.push(ld);
     });
 
+    // either–or: simple uses pills, advanced uses text inputs
+    const includeFilters = filterMode === "simple" ? explicitIncludes : manualIncludes;
+    const excludeFilters = filterMode === "simple" ? explicitExcludes : manualExcludes;
+
     const merged: Config = {
       ...config,
-      includeFilters: [...manualIncludes, ...explicitIncludes],
-      excludeFilters: [...manualExcludes, ...explicitExcludes],
+      includeFilters,
+      excludeFilters,
     };
 
     return { previewConfig: merged, url: configToURL(merged) };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config, pillState, includeText, excludeText, lineDestSuggestions]);
+    // add filterMode to deps
+  }, [config, pillState, includeText, excludeText, lineDestSuggestions, filterMode]);
 
   async function copyUrl() {
     if (!url) return;
-    try { await navigator.clipboard.writeText(url); } catch {}
+    try {
+      await navigator.clipboard.writeText(url);
+      var duration = 2 * 1000;
+      var animationEnd = Date.now() + duration;
+      var defaults = { startVelocity: 30, spread: 800, ticks: 60, zIndex: 0 };
+
+      function randomInRange(min: number, max: number) {
+        return Math.random() * (max - min) + min;
+      }
+
+      var interval = setInterval(function() {
+        var timeLeft = animationEnd - Date.now();
+
+        if (timeLeft <= 0) {
+          return clearInterval(interval);
+        }
+
+        var particleCount = 50 * (timeLeft / duration);
+        // since particles fall down, start a bit higher than random
+        confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
+        confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
+      }, 250);
+    } catch {
+      // you could show an error toast here if you want
+    }
   }
+
 
   return (
     <main className={`bg-gray-950 text-white min-h-dvh ${manrope.className}`}>
@@ -192,7 +202,7 @@ export default function DepartureConfigurator() {
               <h2 className="text-lg font-semibold mb-3">Station</h2>
               <input
                 className="w-full px-3 py-2 rounded-md border border-gray-700 bg-gray-950 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Search for a station…"
+                placeholder="Search for a station inside the MVG network…"
                 value={stationQuery}
                 onChange={(e) => setStationQuery(e.target.value)}
                 autoFocus
@@ -205,7 +215,7 @@ export default function DepartureConfigurator() {
                   {stationSuggestions.map((s) => (
                     <li key={s.id}>
                       <button
-                        className="w-full text-left px-3 py-2 hover:bg-gray-800"
+                        className="w-full text-left px-3 py-2 hover:bg-gray-800 cursor-pointer"
                         onClick={() => selectStation(s)}
                       >
                         <div className="font-medium">{s.name}</div>
@@ -243,7 +253,7 @@ export default function DepartureConfigurator() {
                   )}
                 </div>
                 <button
-                  className="text-sm px-3 py-1.5 rounded-md border border-gray-700 hover:bg-gray-800"
+                  className="text-sm px-3 py-1.5 rounded-md border border-gray-700 hover:bg-gray-800 cursor-pointer"
                   onClick={() => {
                     setSelectedStation(null);
                     setStationQuery("");
@@ -293,7 +303,7 @@ export default function DepartureConfigurator() {
                     onChange={(e) => setConfig((c) => ({ ...c, darkMode: e.target.checked }))}
                     className="h-4 w-4"
                   />
-                  <span className="text-sm">Dark mode (board)</span>
+                  <span className="text-sm">Board dark mode</span>
                 </label>
                 <p className="mt-1 text-xs text-gray-400">
                   Defaults to your system preference. Toggling changes the preview & URL; the configurator stays dark.
@@ -353,14 +363,14 @@ export default function DepartureConfigurator() {
                     <button
                       disabled={!url}
                       onClick={copyUrl}
-                      className="px-3 py-1.5 rounded-md text-sm border border-gray-700 hover:bg-gray-800 disabled:opacity-50"
+                      className="cursor-pointer px-3 py-1.5 rounded-md text-sm border border-gray-700 hover:bg-gray-800 disabled:opacity-50"
                     >
                       Copy
                     </button>
                     <button
                       disabled={!url}
                       onClick={() => url && window.open(url, "_blank")}
-                      className="px-3 py-1.5 rounded-md text-sm bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-700"
+                      className="cursor-pointer px-3 py-1.5 rounded-md text-sm bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-700"
                     >
                       Open
                     </button>
@@ -376,89 +386,140 @@ export default function DepartureConfigurator() {
           <section className="mt-6 rounded-xl border border-gray-800 bg-gray-900 p-5 shadow-sm">
             <div className="flex items-center justify-between gap-4">
               <h2 className="text-lg font-semibold">Filters</h2>
-              <div className="text-xs text-gray-400">
-                Click a pill to toggle: include (green) / exclude (red). Wildcards in the fields colour matching pills automatically; exclude wins if both apply.
+
+              {/* tabs */}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className={`cursor-pointer px-3 py-1.5 rounded-md border ${
+                    filterMode === "simple"
+                      ? "bg-gray-200 text-black border-gray-300"
+                      : "bg-gray-800 text-gray-200 border-gray-700"
+                  }`}
+                  onClick={() => setFilterMode("simple")}
+                  aria-pressed={filterMode === "simple"}
+                >
+                  Simple
+                </button>
+                <button
+                  type="button"
+                  className={`cursor-pointer px-3 py-1.5 rounded-md border ${
+                    filterMode === "advanced"
+                      ? "bg-gray-200 text-black border-gray-300"
+                      : "bg-gray-800 text-gray-200 border-gray-700"
+                  }`}
+                  onClick={() => setFilterMode("advanced")}
+                  aria-pressed={filterMode === "advanced"}
+                >
+                  Advanced
+                </button>
               </div>
             </div>
 
-            {/* Manual fields */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Include</label>
-                <input
-                  className={`w-full px-3 py-2 rounded-md border border-gray-700 bg-gray-950 text-sm ${geistMono.className}`}
-                  placeholder="U2:*;53:Aidenbachstraße"
-                  value={includeText}
-                  onChange={(e) => setIncludeText(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Exclude</label>
-                <input
-                  className={`w-full px-3 py-2 rounded-md border border-gray-700 bg-gray-950 text-sm ${geistMono.className}`}
-                  placeholder="U*:*"
-                  value={excludeText}
-                  onChange={(e) => setExcludeText(e.target.value)}
-                />
-              </div>
-            </div>
+            {filterMode === "simple" ? (
+              <>
+                <p className="mt-2 text-xs text-gray-400">
+                  Click a pill to toggle: include (green) / exclude (red). 
+                </p>
 
-            {/* Pills / Loading / Error */}
-            <div className="mt-4">
-              {ldsLoading ? (
-                // Skeleton chips while fetching suggestions
-                <div className="flex flex-wrap gap-2 animate-pulse">
-                  {Array.from({ length: 14 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="h-6 rounded-full border border-gray-700 bg-gray-800"
-                      style={{ width: `${Math.floor(50 + Math.random() * 100)}px` }}
-                    />
-                  ))}
+                {/* Pills / Loading / Error */}
+                <div className="mt-4">
+                  {ldsLoading ? (
+                    <div className="flex flex-wrap gap-2 animate-pulse">
+                      {Array.from({ length: 14 }).map((_, i) => (
+                        <div
+                          key={i}
+                          className="h-6 rounded-full border border-gray-700 bg-gray-800"
+                          style={{ width: `${Math.floor(50 + Math.random() * 100)}px` }}
+                        />
+                      ))}
+                    </div>
+                  ) : lineDestSuggestions.length === 0 ? (
+                    <p className="text-sm text-gray-400">No lines available.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {lineDestSuggestions.map((ld, idx) => {
+                        const state = computePillState(idx);
+                        return (
+                          <button
+                            key={`${ld.line}-${ld.destination}-${idx}`}
+                            onClick={() => onPillClick(idx)}
+                            className={`cursor-pointer select-none rounded-full px-3 py-1 text-xs border ${triClasses(state)} ${geistMono.className}`}
+                            title={`${ld.line}:${ld.destination}`}
+                          >
+                            {ld.line}:{ld.destination}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              ) : ldsError ? (
-                <div className="text-sm text-red-300 bg-red-900/20 border border-red-800 rounded p-3 flex items-center justify-between">
-                  <span>{ldsError}</span>
+
+                {/* Quick actions (simple) */}
+                <div className="mt-4">
                   <button
-                    onClick={() => selectedStation && loadLineDestSuggestions(selectedStation)}
-                    className="ml-3 px-2 py-1 rounded border border-red-700 hover:bg-red-900/30"
+                    onClick={() => setPillState({})}
+                    className="cursor-pointer text-sm px-3 py-1.5 rounded-md border border-gray-700 hover:bg-gray-800"
                   >
-                    Retry
+                    Clear pill selections
                   </button>
                 </div>
-              ) : lineDestSuggestions.length === 0 ? (
-                <p className="text-sm text-gray-400">No lines available.</p>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {lineDestSuggestions.map((ld, idx) => {
-                    const state = computePillState(idx);
-                    return (
-                      <button
-                        key={`${ld.line}-${ld.destination}-${idx}`}
-                        onClick={() => onPillClick(idx)}
-                        className={`cursor-pointer select-none rounded-full px-3 py-1 text-xs border ${triClasses(state)} ${geistMono.className}`}
-                        title={`${ld.line}:${ld.destination}`}
-                      >
-                        {ld.line}:{ld.destination}
-                      </button>
-                    );
-                  })}
+              </>
+            ) : (
+              <>
+                {/* Advanced help */}
+                <div className="mt-3 rounded-lg border border-gray-800 bg-gray-950 p-3 text-sm text-gray-300">
+                  <div className="font-medium mb-1">Syntax</div>
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>
+                      Use <code>LINE:DESTINATION</code>, e.g. <code>U6:Klinikum Großhadern</code>
+                    </li>
+                    <li>
+                      Wildcards: <code>U*:*</code> (all U-Bahn), <code>*:Garching*</code> (destinations starting with “Garching”)
+                    </li>
+                    <li>Separate entries with semicolons, e.g. <code>U2:*;53:Aidenbachstraße</code></li>
+                    <li>Exclude wins if both include and exclude match</li>
+                  </ul>
                 </div>
-              )}
-            </div>
 
-            {/* Quick actions */}
-            <div className="mt-4 flex flex-wrap gap-3">
-              <button onClick={() => setPillState({})} className="text-sm px-3 py-1.5 rounded-md border border-gray-700 hover:bg-gray-800">
-                Clear pill selections
-              </button>
-              <button onClick={() => { setIncludeText(""); setExcludeText(""); }} className="text-sm px-3 py-1.5 rounded-md border border-gray-700 hover:bg-gray-800">
-                Clear text filters
-              </button>
-            </div>
+                {/* Advanced inputs */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Include</label>
+                    <input
+                      className={`w-full px-3 py-2 rounded-md border border-gray-700 bg-gray-950 text-sm ${geistMono.className}`}
+                      placeholder="U2:*;53:Aidenbachstraße"
+                      value={includeText}
+                      onChange={(e) => setIncludeText(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Exclude</label>
+                    <input
+                      className={`w-full px-3 py-2 rounded-md border border-gray-700 bg-gray-950 text-sm ${geistMono.className}`}
+                      placeholder="U*:*"
+                      value={excludeText}
+                      onChange={(e) => setExcludeText(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Quick actions (advanced) */}
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button
+                    onClick={() => { setIncludeText(""); setExcludeText(""); }}
+                    className="cursor-pointer text-sm px-3 py-1.5 rounded-md border border-gray-700 hover:bg-gray-800"
+                  >
+                    Clear text filters
+                  </button>
+                </div>
+              </>
+            )}
           </section>
         )}
+
       </div>
+
     </main>
   );
 }

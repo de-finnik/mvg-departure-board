@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Config, Departure } from "@/types/types";
 import { formatTimeDiff } from "@/lib/utils";
 import { getLineBackground, getLineFontcolor } from "@/lib/colors";
@@ -67,7 +67,7 @@ export default function DepartureBoardCore({ config }: { config: Config }) {
     return () => {
       if (clockId) window.clearInterval(clockId);
     };
-  }, []);
+  }, [config.titleBar]);
 
   useEffect(() => {
     showDepartures();

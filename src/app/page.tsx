@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Station, LineDest, Config } from "@/types/types";
 import { configToURL } from "@/lib/parseConfig";
 import { Manrope, Geist_Mono } from "next/font/google";
@@ -19,10 +19,6 @@ function decodeFilters(str: string): LineDest[] {
     const [line = "", destination = ""] = tok.split(":");
     return { line, destination };
   });
-}
-function patternToRegex(pattern: string): RegExp {
-  const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
-  return new RegExp(`^${escaped}$`, "i");
 }
 type Tri = "neutral" | "include" | "exclude";
 type FilterMode = "simple" | "advanced";
@@ -150,28 +146,28 @@ export default function DepartureConfigurator() {
 
     return { previewConfig: merged, url: configToURL(merged) };
     // add filterMode to deps
-  }, [config, pillState, includeText, excludeText, lineDestSuggestions, filterMode]);
+  }, [config, pillState, lineDestSuggestions, filterMode, manualIncludes, manualExcludes]);
 
   async function copyUrl() {
     if (!url) return;
     try {
       await navigator.clipboard.writeText(url);
-      var duration = 2 * 1000;
-      var animationEnd = Date.now() + duration;
-      var defaults = { startVelocity: 30, spread: 800, ticks: 60, zIndex: 0 };
+      const duration = 2 * 1000;
+      const animationEnd = Date.now() + duration;
+      const defaults = { startVelocity: 30, spread: 800, ticks: 60, zIndex: 0 };
 
       function randomInRange(min: number, max: number) {
         return Math.random() * (max - min) + min;
       }
 
-      var interval = setInterval(function() {
-        var timeLeft = animationEnd - Date.now();
+      const interval = setInterval(function() {
+        const timeLeft = animationEnd - Date.now();
 
         if (timeLeft <= 0) {
           return clearInterval(interval);
         }
 
-        var particleCount = 50 * (timeLeft / duration);
+        const particleCount = 50 * (timeLeft / duration);
         // since particles fall down, start a bit higher than random
         confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
         confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });

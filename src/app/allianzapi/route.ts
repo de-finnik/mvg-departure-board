@@ -31,7 +31,7 @@ export async function GET(req: Request) {
         const { searchParams } = new URL(req.url);
         const date = searchParams.get('date') ? searchParams.get('date') : new Date().toISOString().split('T')[0];
         const teamId = searchParams.get('team') ? searchParams.get('team') : "40";
-        const response = await axios.get(`https://api.openligadb.de/getmatchesbyteamid/${teamId}/0/1`);
+        const response = await axios.get(`https://api.openligadb.de/getmatchesbyteamid/${teamId}/1/1`);
         const data: Match[] = response.data;
 
         const filteredMatches = data.filter(match => {

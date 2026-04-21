@@ -25,14 +25,19 @@ export default {
       },
       {
         source: '/gf',
-        destination: '//board?station=de%3A09184%3A460&amount=5&theme=dark&include=U*%3A*&exclude=',
+        destination: '/board?station=de%3A09162%3A1010&amount=5&theme=dark&titlebar=U5+ab+Neuperlach+S%C3%BCd&include=U5%3A&exclude=',
         permanent: false, // true -> 308 (permanent), false -> 307 (temporary)
       },
       {
         source: '/gf-light',
-        destination: '//board?station=de%3A09184%3A460&amount=5&theme=light&include=U*%3A*&exclude=',
+        destination: '/board?station=de%3A09184%3A460&amount=5&theme=light&include=U*%3A*&exclude=',
         permanent: false, // true -> 308 (permanent), false -> 307 (temporary)
       },
+      {
+        source: '/pch',
+        destination: '/board?station=de%3A09184%3A460&amount=5&theme=light&include=U*%3A*&exclude=',
+        permanent: false, // true -> 308 (permanent), false -> 307 (temporary)
+      }
     ];
   },
 };

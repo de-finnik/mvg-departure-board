@@ -44,8 +44,10 @@ export default function DepartureBoardCore({ config }: { config: Config }) {
 
   useEffect(() => {
     mvgService.initialize(config.station.id);
-    mvgService.subscribe(showDepartures);
-  });
+    const unsubscribe = mvgService.subscribe(showDepartures);
+    return unsubscribe;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.station.id]);
 
   // Kick off fetch + poll every 30s
   useEffect(() => {

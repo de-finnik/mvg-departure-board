@@ -157,7 +157,7 @@ export default function DeckCard({ deck, isSortable, dragHandleProps, onUpdate, 
                 <div className="border-t border-gray-800">
                     {/* Live board */}
                     <div className="border-b border-gray-800">
-                        <DepartureBoardCore config={deck.config} service={svc} />
+                        <DepartureBoardCore config={deck.config} service={svc} fullWidth />
                     </div>
 
                     {/* Filters */}

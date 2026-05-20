@@ -10,7 +10,7 @@ import { MvgService, mvgRegistry } from "@/services/mvg.service";
 const manrope = Manrope({subsets: ['latin']});
 const geist_mono = Geist_Mono({subsets: ['latin']});
 
-export default function DepartureBoardCore({ config, service }: { config: Config; service?: MvgService }) {
+export default function DepartureBoardCore({ config, service, fullWidth }: { config: Config; service?: MvgService; fullWidth?: boolean }) {
   const svc = service ?? mvgRegistry.get(config.station.id);
   const [departures, setDepartures] = useState<Departure[]>([]);
   function departuresInFuture() {
@@ -82,12 +82,12 @@ export default function DepartureBoardCore({ config, service }: { config: Config
   return (
     <div
       className={[
-        "w-full md:max-w-md flex items-center justify-center p-4",
+        `w-full ${fullWidth ? "" : "md:max-w-md"} flex items-center justify-center p-4`,
         config.darkMode ? "bg-gray-900 text-white" : "bg-white text-gray-900",
         manrope.className,
       ].join(" ")}
     >
-      <div className="w-full md:max-w-md flex flex-col space-y-2 min-w-0" aria-live="polite">
+      <div className={`w-full ${fullWidth ? "" : "md:max-w-md"} flex flex-col space-y-2 min-w-0`} aria-live="polite">
         {/* Title bar */}
         {config.titleBar !== "" && (
           <div className="flex justify-between items-center mb-2 text-sm text-gray-500 dark:text-gray-400">

@@ -8,7 +8,10 @@ const STORAGE_KEY = "mvg-decks";
 function loadFromStorage(): DeckCollection {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
-        return raw ? (JSON.parse(raw) as DeckCollection) : [];
+        if (!raw) return [];
+        const parsed = JSON.parse(raw) as DeckCollection;
+        // Always start collapsed — don't persist expanded state across visits
+        return parsed.map(d => ({ ...d, collapsed: true }));
     } catch {
         return [];
     }

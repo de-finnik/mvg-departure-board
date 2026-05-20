@@ -26,7 +26,7 @@ export default function Dashboard() {
             config: {
                 station,
                 amount: 5,
-                darkMode: false,
+                darkMode: typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches,
                 titleBar: "",
                 includeFilters: [],
                 excludeFilters: [],

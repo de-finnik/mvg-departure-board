@@ -31,6 +31,7 @@ export default function DepartureBoardCore({ config, service, fullWidth }: { con
     () => config.excludeFilters.map((f) => `${f.line}:${f.destination}`).join(";"),
     [config.excludeFilters]
   );
+  const excludeTypesKey = (config.excludedTransportTypes ?? []).join(",");
 
   const showDepartures = () => {
     const response = svc.getDepartures(config);
@@ -74,7 +75,7 @@ export default function DepartureBoardCore({ config, service, fullWidth }: { con
 
   useEffect(() => {
     showDepartures();
-  }, [config.station.id, includeKey, excludeKey, config.amount]);
+  }, [config.station.id, includeKey, excludeKey, excludeTypesKey, config.amount]);
 
   const skeletonBar = config.darkMode ? "bg-gray-700" : "bg-gray-200";
   const skeletonCount = Math.max(3, config.amount || 5);

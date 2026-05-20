@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Deck, LineDest } from "@/types/types";
+import { Deck, LineDest, TransportType } from "@/types/types";
 import { configToURL } from "@/lib/parseConfig";
 import { mvgRegistry } from "@/services/mvg.service";
 import { Manrope, Geist_Mono } from "next/font/google";
@@ -53,12 +53,12 @@ export default function DeckCard({ deck, isSortable, dragHandleProps, onUpdate, 
         }
     }
 
-    function handleFilterChange(include: LineDest[], exclude: LineDest[]) {
+    function handleFilterChange(excludedTransportTypes: TransportType[], excludeFilters: LineDest[]) {
         onUpdate({
             config: {
                 ...deck.config,
-                includeFilters: include,
-                excludeFilters: exclude,
+                excludedTransportTypes,
+                excludeFilters,
             },
         });
     }
@@ -100,15 +100,24 @@ export default function DeckCard({ deck, isSortable, dragHandleProps, onUpdate, 
                         />
                     ) : (
                         <button
-                            className="font-semibold text-base text-white truncate max-w-full text-left hover:text-gray-300 cursor-text"
-                            onClick={startEditLabel}
-                            title="Click to rename"
+                            className="font-semibold text-base text-white truncate max-w-full text-left hover:text-gray-300 cursor-pointer"
+                            onClick={() => onUpdate({ collapsed: !collapsed })}
+                            onDoubleClick={startEditLabel}
+                            title="Double-click to rename"
                         >
                             {deck.label}
                         </button>
                     )}
                     {deck.config.station.place && (
-                        <span className={`text-xs text-gray-500 ${geistMono.className}`}> · {deck.config.station.place}</span>
+                        <>
+                            <span className="text-xs text-gray-600 mx-2">·</span>
+                            <button
+                                className={`text-xs text-gray-500 hover:text-gray-400 cursor-pointer ${geistMono.className}`}
+                                onClick={() => onUpdate({ collapsed: !collapsed })}
+                            >
+                                {deck.config.station.place}
+                            </button>
+                        </>
                     )}
                 </div>
 
@@ -178,7 +187,7 @@ export default function DeckCard({ deck, isSortable, dragHandleProps, onUpdate, 
                             <div className="px-4 pb-4">
                                 <FilterEditor
                                     stationId={deck.config.station.id}
-                                    includeFilters={deck.config.includeFilters}
+                                    excludedTransportTypes={deck.config.excludedTransportTypes}
                                     excludeFilters={deck.config.excludeFilters}
                                     onChange={handleFilterChange}
                                 />

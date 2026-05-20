@@ -11,7 +11,11 @@ function loadFromStorage(): DeckCollection {
         if (!raw) return [];
         const parsed = JSON.parse(raw) as DeckCollection;
         // Always start collapsed — don't persist expanded state across visits
-        return parsed.map(d => ({ ...d, collapsed: true }));
+        return parsed.map(d => ({
+            ...d,
+            collapsed: true,
+            config: { ...d.config, excludedTransportTypes: d.config.excludedTransportTypes ?? [] },
+        }));
     } catch {
         return [];
     }

@@ -1,13 +1,14 @@
-import { Config, LineDest } from "@/types/types";
+import { Config, LineDest, TransportType } from "@/types/types";
 import { ReadonlyURLSearchParams } from "next/navigation";
 
 export const defaultConfig: Config = {
   station: { id: "" },
   amount: 5,
   darkMode: false,
-  titleBar: "",            // empty string = title OFF
+  titleBar: "",
   includeFilters: [],
   excludeFilters: [],
+  excludedTransportTypes: [],
 };
 
 function parseIntOrDefault(input: string | null | undefined, def: number) {
@@ -31,14 +32,26 @@ function decodeFilters(str: string | null): LineDest[] {
     });
 }
 
+const VALID_TRANSPORT_TYPES = new Set<string>(["UBahn", "SBahn", "Tram", "Bus"]);
+
+function decodeTransportTypes(str: string | null): TransportType[] {
+  if (!str) return [];
+  return str.split(",").filter(t => VALID_TRANSPORT_TYPES.has(t)) as TransportType[];
+}
+
+function encodeTransportTypes(types: TransportType[]): string {
+  return types.join(",");
+}
+
 export function searchParamToConfig(searchParams: ReadonlyURLSearchParams): Config {
   return {
     station: { id: searchParams.get("station") || "" },
     amount: parseIntOrDefault(searchParams.get("amount"), defaultConfig.amount),
     darkMode: searchParams.get("theme") === "dark",
-    titleBar: searchParams.get("titlebar") ?? "",   // empty when missing
+    titleBar: searchParams.get("titlebar") ?? "",
     includeFilters: decodeFilters(searchParams.get("include")),
     excludeFilters: decodeFilters(searchParams.get("exclude")),
+    excludedTransportTypes: decodeTransportTypes(searchParams.get("excludeTypes")),
   };
 }
 
@@ -53,6 +66,12 @@ export function configToURL(config: Config): string {
 
   q.set("include", encodeFilters(config.includeFilters));
   q.set("exclude", encodeFilters(config.excludeFilters));
+
+  if (config.excludedTransportTypes.length > 0) {
+    q.set("excludeTypes", encodeTransportTypes(config.excludedTransportTypes));
+  } else {
+    q.delete("excludeTypes");
+  }
 
   return `${window.location.origin}/board?${q.toString()}`;
 }

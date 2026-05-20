@@ -1,4 +1,5 @@
 import { Config, Departure, LineDest, Station } from "@/types/types";
+import { getTransportType } from "@/lib/transport";
 
 type SubscriberCallback = () => void;
 
@@ -131,6 +132,10 @@ export class MvgService {
         }
 
         return this.departures.filter(d => {
+            if (config.excludedTransportTypes?.length > 0 &&
+                config.excludedTransportTypes.includes(getTransportType(d.linedest.line))) {
+                return false;
+            }
             if(config.excludeFilters.some(this._filterTestDep(d.linedest))) {
                 return false;
             }

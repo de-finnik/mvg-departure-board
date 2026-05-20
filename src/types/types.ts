@@ -1,3 +1,6 @@
+import type { TransportType } from "@/lib/transport";
+export type { TransportType };
+
 export type Station = {
     id: string;
     name?: string;
@@ -17,6 +20,7 @@ export type Config = {
     titleBar: string;
     includeFilters: LineDest[];
     excludeFilters: LineDest[];
+    excludedTransportTypes: TransportType[];
 };
 
 export type LineDest = {

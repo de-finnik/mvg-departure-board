@@ -30,6 +30,7 @@ export default function Dashboard() {
                 titleBar: "",
                 includeFilters: [],
                 excludeFilters: [],
+                excludedTransportTypes: [],
             },
         };
         setTempDeck(newDeck);

@@ -9,37 +9,24 @@ export async function fetchStations(searchString: string): Promise<Station[]> {
     for(const entry of data) {
         const station: Station = {
             name: entry.name,
-            id: entry.globalId, 
-            place: entry.place  
-
+            id: entry.globalId,
+            place: entry.place
         }
         stations.push(station);
     }
     return stations;
 }
 
-class MvgService {
-    private static instance: MvgService;
-
+export class MvgService {
     private stationId: string | null = null;
     private departures: Departure[] = [];
     private error: Error | null = null;
 
     private apiRequestsCount = 0;
-    private lastFullRefresh: Date | null = null;
     private isFetching = false;
-
+    private pollIntervalId: ReturnType<typeof setInterval> | null = null;
 
     private subscribers: SubscriberCallback[] = [];
-
-    private constructor() {}
-
-    public static getInstance(): MvgService {
-        if(!MvgService.instance) {
-            MvgService.instance = new MvgService();
-        }
-        return MvgService.instance;
-    }
 
     public subscribe(callback: SubscriberCallback): () => void {
         this.subscribers.push(callback);
@@ -60,8 +47,11 @@ class MvgService {
         this.stationId = stationId;
         this.departures = [];
 
+        if (this.pollIntervalId !== null) {
+            clearInterval(this.pollIntervalId);
+        }
         this._backgroundRefresh();
-        setInterval(() => this._backgroundRefresh(), 60000);
+        this.pollIntervalId = setInterval(() => this._backgroundRefresh(), 60000);
     }
 
     private resetCache() {
@@ -74,7 +64,6 @@ class MvgService {
         console.log("MvgService: starting background refresh");
         this.resetCache();
         await this._fetchAndAppendRawData(0);
-        this.lastFullRefresh = new Date();
         this._notify();
     }
 
@@ -82,7 +71,6 @@ class MvgService {
         this._backgroundRefresh();
     }
 
-    // Rewrite some Line Names because they are too long
     private filterLine(line: string): string {
         if(line === "LUFTHANSA EXPRESS BUS") {
             return "LH";
@@ -102,7 +90,7 @@ class MvgService {
             this.apiRequestsCount++;
             console.log(`MvgService: api request #${this.apiRequestsCount} successful`);
             this.error = null;
-            
+
             if (data && data.length > 0) {
                 for (const entry of data) {
                     if(entry.cancelled) {
@@ -115,15 +103,12 @@ class MvgService {
                         },
                         time: new Date(entry.realtimeDepartureTime)
                     };
-                    // Departure in the past
                     if(departure.time.getTime() < new Date().getTime() + 10000) {
-                    continue;
+                        continue;
                     }
-
-                    // Departure already in the list?
                     if(this.departures.some(
-                        d=>d.time.getTime() === departure.time.getTime() && 
-                        d.linedest.destination === departure.linedest.destination && 
+                        d=>d.time.getTime() === departure.time.getTime() &&
+                        d.linedest.destination === departure.linedest.destination &&
                         d.linedest.line === departure.linedest.line)) {
                         continue;
                     }
@@ -171,7 +156,26 @@ class MvgService {
             return new RegExp(filter.destination.replaceAll("*", ".*")).test(departure.destination) && new RegExp(filter.line.replaceAll("*", ".*")).test(departure.line);
         }
     }
-
 }
 
-export const mvgService = MvgService.getInstance();
+class MvgServiceRegistry {
+    private registry = new Map<string, MvgService>();
+
+    get(stationId: string): MvgService {
+        if (!this.registry.has(stationId)) {
+            const svc = new MvgService();
+            svc.initialize(stationId);
+            this.registry.set(stationId, svc);
+        }
+        return this.registry.get(stationId)!;
+    }
+
+    release(stationId: string) {
+        this.registry.delete(stationId);
+    }
+}
+
+export const mvgRegistry = new MvgServiceRegistry();
+
+// Backwards-compatible singleton for /board page
+export const mvgService = new MvgService();

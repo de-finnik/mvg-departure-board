@@ -5,12 +5,13 @@ import { Config, Departure } from "@/types/types";
 import { formatTimeDiff } from "@/lib/utils";
 import { getLineBackground, getLineFontcolor } from "@/lib/colors";
 import { Manrope, Geist_Mono } from "next/font/google";
-import { mvgService } from "@/services/mvg.service";
+import { MvgService, mvgRegistry } from "@/services/mvg.service";
 
 const manrope = Manrope({subsets: ['latin']});
 const geist_mono = Geist_Mono({subsets: ['latin']});
 
-export default function DepartureBoardCore({ config }: { config: Config }) {
+export default function DepartureBoardCore({ config, service }: { config: Config; service?: MvgService }) {
+  const svc = service ?? mvgRegistry.get(config.station.id);
   const [departures, setDepartures] = useState<Departure[]>([]);
   function departuresInFuture() {
     return departures.filter(dep=>dep.time.getTime() >= Date.now());
@@ -32,7 +33,7 @@ export default function DepartureBoardCore({ config }: { config: Config }) {
   );
 
   const showDepartures = () => {
-    const response = mvgService.getDepartures(config);
+    const response = svc.getDepartures(config);
     if(response instanceof Error) {
       setLoadError(response.message);
     } else {
@@ -43,8 +44,8 @@ export default function DepartureBoardCore({ config }: { config: Config }) {
   };
 
   useEffect(() => {
-    mvgService.initialize(config.station.id);
-    const unsubscribe = mvgService.subscribe(showDepartures);
+    svc.initialize(config.station.id);
+    const unsubscribe = svc.subscribe(showDepartures);
     return unsubscribe;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.station.id]);
@@ -100,7 +101,7 @@ export default function DepartureBoardCore({ config }: { config: Config }) {
           <div className="text-sm text-red-400 bg-red-900/20 border border-red-800 rounded p-3">
             {loadError}{" "}
             <button
-              onClick={() => {mvgService.triggerRefresh()}}
+              onClick={() => {svc.triggerRefresh()}}
               className="underline hover:no-underline ml-2"
             >
               Retry

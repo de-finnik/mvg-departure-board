@@ -28,3 +28,12 @@ export type Departure = {
     linedest: LineDest;
     time: Date;
 }
+
+export type Deck = {
+    id: string;
+    label: string;
+    config: Config;
+    collapsed: boolean;
+};
+
+export type DeckCollection = Deck[];

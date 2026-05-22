@@ -18,6 +18,16 @@ export async function fetchStations(searchString: string): Promise<Station[]> {
     return stations;
 }
 
+export async function fetchNearbyStations(lat: number, lon: number): Promise<Station[]> {
+    const res = await fetch(`https://www.mvg.de/api/bgw-pt/v3/stations/nearby?latitude=${lat}&longitude=${lon}`);
+    const data = await res.json();
+    return data.map((s: { globalId: string; name: string; place: string }) => ({
+        id: s.globalId,
+        name: s.name,
+        place: s.place,
+    }));
+}
+
 export class MvgService {
     private stationId: string | null = null;
     private departures: Departure[] = [];

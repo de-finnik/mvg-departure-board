@@ -6,6 +6,7 @@ import { Deck } from "@/types/types";
 import { useDecks } from "@/hooks/useDecks";
 import { mvgRegistry } from "@/services/mvg.service";
 import StationSearch from "@/components/StationSearch";
+import NearbyStations from "@/components/NearbyStations";
 import DeckCard from "@/components/DeckCard";
 import DeckList from "@/components/DeckList";
 
@@ -61,13 +62,14 @@ export default function Dashboard() {
                     )}
                 </div>
 
-                {/* Search bar */}
+                {/* Search bar + nearby stations */}
                 <div className="mb-8 relative">
                     <StationSearch
                         onSelect={handleStationSelect}
                         placeholder="Search for a station in the MVG network…"
                         autoFocus={isEmpty}
                     />
+                    <NearbyStations onSelect={handleStationSelect} />
                 </div>
 
                 {/* Temp (unsaved) deck */}

@@ -88,9 +88,7 @@ export default function DeckCard({ deck, isSortable, dragHandleProps, onUpdate, 
                 <div className="flex-1 min-w-0">
                     {isEditingLabel ? (
                         <input
-                            ref={labelInputRef}
-                            className="w-full bg-transparent border-b border-gray-600 text-white font-semibold text-base focus:outline-none focus:border-blue-500"
-                            value={labelDraft}
+                    value={labelDraft}
                             onChange={(e) => setLabelDraft(e.target.value)}
                             onBlur={commitLabel}
                             onKeyDown={(e) => {
@@ -221,6 +219,17 @@ export default function DeckCard({ deck, isSortable, dragHandleProps, onUpdate, 
                                 className="h-3.5 w-3.5"
                             />
                             Dark board
+                        </label>
+
+                        {/* Show cancelled */}
+                        <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-gray-400">
+                            <input
+                                type="checkbox"
+                                checked={deck.config.showCancelled ?? false}
+                                onChange={(e) => onUpdate({ config: { ...deck.config, showCancelled: e.target.checked } })}
+                                className="h-3.5 w-3.5"
+                            />
+                            Show cancelled
                         </label>
 
                         {/* Title bar */}

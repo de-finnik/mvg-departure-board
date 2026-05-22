@@ -72,6 +72,19 @@ export class MvgService {
         this._backgroundRefresh();
     }
 
+    public pause() {
+        if (this.pollIntervalId !== null) {
+            clearInterval(this.pollIntervalId);
+            this.pollIntervalId = null;
+        }
+    }
+
+    public resume() {
+        if (this.pollIntervalId !== null) return;
+        this._backgroundRefresh();
+        this.pollIntervalId = setInterval(() => this._backgroundRefresh(), 60000);
+    }
+
     private filterLine(line: string): string {
         if(line === "LUFTHANSA EXPRESS BUS") {
             return "LH";
@@ -94,15 +107,13 @@ export class MvgService {
 
             if (data && data.length > 0) {
                 for (const entry of data) {
-                    if(entry.cancelled) {
-                        continue;
-                    }
                     const departure: Departure = {
                         linedest: {
                             line: this.filterLine(entry.label),
                             destination: entry.destination
                         },
-                        time: new Date(entry.realtimeDepartureTime)
+                        time: new Date(entry.realtimeDepartureTime),
+                        cancelled: entry.cancelled ?? false,
                     };
                     if(departure.time.getTime() < new Date().getTime() + 10000) {
                         continue;
@@ -132,6 +143,7 @@ export class MvgService {
         }
 
         return this.departures.filter(d => {
+            if (d.cancelled && !config.showCancelled) return false;
             if (config.excludedTransportTypes?.length > 0 &&
                 config.excludedTransportTypes.includes(getTransportType(d.linedest.line))) {
                 return false;

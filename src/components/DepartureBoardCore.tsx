@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Config, Departure } from "@/types/types";
 import { formatTimeDiff } from "@/lib/utils";
 import { getLineBackground, getLineFontcolor } from "@/lib/colors";
@@ -44,9 +44,13 @@ export default function DepartureBoardCore({ config, service, fullWidth }: { con
     setIsInitialLoad(false);
   };
 
+  // Always call the latest showDepartures so the subscription never uses a stale config closure
+  const showDeparturesRef = useRef(showDepartures);
+  showDeparturesRef.current = showDepartures;
+
   useEffect(() => {
     svc.initialize(config.station.id);
-    const unsubscribe = svc.subscribe(showDepartures);
+    const unsubscribe = svc.subscribe(() => showDeparturesRef.current());
     return unsubscribe;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.station.id]);
@@ -75,7 +79,21 @@ export default function DepartureBoardCore({ config, service, fullWidth }: { con
 
   useEffect(() => {
     showDepartures();
-  }, [config.station.id, includeKey, excludeKey, excludeTypesKey, config.amount]);
+  }, [config.station.id, includeKey, excludeKey, excludeTypesKey, config.amount, config.showCancelled]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        svc.pause();
+      } else {
+        setIsInitialLoad(true);
+        svc.resume();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.station.id]);
 
   const skeletonBar = config.darkMode ? "bg-gray-700" : "bg-gray-200";
   const skeletonCount = Math.max(3, config.amount || 5);
@@ -102,7 +120,7 @@ export default function DepartureBoardCore({ config, service, fullWidth }: { con
           <div className="text-sm text-red-400 bg-red-900/20 border border-red-800 rounded p-3">
             {loadError}{" "}
             <button
-              onClick={() => {svc.triggerRefresh()}}
+              onClick={() => { setIsInitialLoad(true); svc.triggerRefresh(); }}
               className="underline hover:no-underline ml-2"
             >
               Retry
@@ -123,8 +141,8 @@ export default function DepartureBoardCore({ config, service, fullWidth }: { con
           </div>
         ) : (
           // Rows
-          departuresInFuture().slice(0, config.amount).map(({ linedest, time }, i) => (
-            <div key={i} className="flex items-center text-[1.1rem] leading-tight min-w-0">
+          departuresInFuture().slice(0, config.amount).map(({ linedest, time, cancelled }, i) => (
+            <div key={i} className={`flex items-center text-[1.1rem] leading-tight min-w-0 ${cancelled ? "opacity-60" : ""}`}>
               <div
                 className="w-[3.5rem] h-[1.8rem] rounded-md font-bold mr-4 flex items-center justify-center flex-shrink-0"
                 style={{
@@ -134,8 +152,8 @@ export default function DepartureBoardCore({ config, service, fullWidth }: { con
               >
                 {linedest.line}
               </div>
-              <div className="font-semibold flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{linedest.destination}</div>
-              <div className={`w-[3.5rem] text-right ${geist_mono.className}`}>
+              <div className={`font-semibold flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap ${cancelled ? "line-through text-red-400" : ""}`}>{linedest.destination}</div>
+              <div className={`w-[3.5rem] text-right ${geist_mono.className} ${cancelled ? "line-through text-red-400" : ""}`}>
                 {formatTimeDiff(currentTime, time)}
               </div>
             </div>

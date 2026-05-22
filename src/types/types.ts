@@ -21,6 +21,7 @@ export type Config = {
     includeFilters: LineDest[];
     excludeFilters: LineDest[];
     excludedTransportTypes: TransportType[];
+    showCancelled: boolean;
 };
 
 export type LineDest = {
@@ -31,6 +32,7 @@ export type LineDest = {
 export type Departure = {
     linedest: LineDest;
     time: Date;
+    cancelled?: boolean;
 }
 
 export type Deck = {

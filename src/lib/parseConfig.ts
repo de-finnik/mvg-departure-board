@@ -9,6 +9,7 @@ export const defaultConfig: Config = {
   includeFilters: [],
   excludeFilters: [],
   excludedTransportTypes: [],
+  showCancelled: false,
 };
 
 function parseIntOrDefault(input: string | null | undefined, def: number) {
@@ -52,6 +53,7 @@ export function searchParamToConfig(searchParams: ReadonlyURLSearchParams): Conf
     includeFilters: decodeFilters(searchParams.get("include")),
     excludeFilters: decodeFilters(searchParams.get("exclude")),
     excludedTransportTypes: decodeTransportTypes(searchParams.get("excludeTypes")),
+    showCancelled: searchParams.get("cancelled") === "1",
   };
 }
 
@@ -72,6 +74,9 @@ export function configToURL(config: Config): string {
   } else {
     q.delete("excludeTypes");
   }
+
+  if (config.showCancelled) q.set("cancelled", "1");
+  else q.delete("cancelled");
 
   return `${window.location.origin}/board?${q.toString()}`;
 }

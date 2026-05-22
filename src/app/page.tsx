@@ -31,6 +31,7 @@ export default function Dashboard() {
                 includeFilters: [],
                 excludeFilters: [],
                 excludedTransportTypes: [],
+                showCancelled: false,
             },
         };
         setTempDeck(newDeck);

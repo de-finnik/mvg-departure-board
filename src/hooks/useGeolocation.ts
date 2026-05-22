@@ -20,7 +20,7 @@ export function useGeolocation() {
         setLoading(true);
         setError(null);
 
-        const id = navigator.geolocation.watchPosition(
+        navigator.geolocation.getCurrentPosition(
             (pos) => {
                 setPosition(pos.coords);
                 setLoading(false);
@@ -31,7 +31,6 @@ export function useGeolocation() {
             },
             { enableHighAccuracy: false, maximumAge: 60_000 }
         );
-        return () => navigator.geolocation.clearWatch(id);
     }, [enabled]);
 
     function enable() {

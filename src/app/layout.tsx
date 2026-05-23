@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import Script from "next/script";
 import "@/styles/globals.css";
 import { Toaster } from "sonner";
 
@@ -49,6 +50,7 @@ export default function RootLayout({
       >
         {children}
         <Toaster richColors />
+        <Script defer src="https://cloud.umami.is/script.js" data-website-id="1f79f6d7-5651-46db-8818-ffde2e50d6b9" />
       </body>
     </html>
   );

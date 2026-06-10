@@ -42,7 +42,7 @@ export default function NearbyStations({ onSelect }: Props) {
     if (error) {
         return (
             <p className="text-xs text-red-400 mt-2 text-center">
-                Location unavailable.{" "}
+                Location unavailable ({error}).{" "}
                 <button onClick={disable} className="underline hover:text-red-300">Disable</button>
             </p>
         );

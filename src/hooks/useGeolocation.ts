@@ -16,7 +16,12 @@ export function useGeolocation() {
     }, []);
 
     useEffect(() => {
-        if (!enabled) return;
+        if (!enabled || position) return;
+        requestPosition();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [enabled]);
+
+    function requestPosition() {
         setLoading(true);
         setError(null);
 
@@ -29,13 +34,17 @@ export function useGeolocation() {
                 setError(err.message);
                 setLoading(false);
             },
-            { enableHighAccuracy: false, maximumAge: 60_000 }
+            { enableHighAccuracy: false, maximumAge: 60_000, timeout: 10_000 }
         );
-    }, [enabled]);
+    }
 
     function enable() {
         localStorage.setItem(LS_KEY, "true");
         setEnabled(true);
+        // Must be called synchronously within the click handler — Safari/iOS
+        // only shows the permission prompt if getCurrentPosition runs inside
+        // the user gesture's call stack, not from a deferred effect.
+        requestPosition();
     }
 
     function disable() {
